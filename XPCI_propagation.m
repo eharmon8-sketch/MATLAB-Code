@@ -1,0 +1,241 @@
+function [effective_pixel_size_horizontal, effective_pixel_size_vertical, FOV_horizontal ,FOV_vertical ,lens_magnification, beam_radius_YAG, beam_radius_sample, sensor_intensities, sensor_intensities_with_sample] = XPCI_propagation(sample_type, xray_photon_energy, YAG_diameter, YAG_fluorescence_emission, flux_IP_per_pulse, number_pulses, opening_angle, sample_diameter, sample_thickness, distance_IP_window, distance_window_sample,  distance_sample_YAG,distance_YAG_lens)
+%% Function Inputs
+
+
+%% Function Outputs
+
+
+%% Parameters that were used by Trixia
+% samD = 0.005; % m
+% distYAGtoCam = 0.5; % m
+% energy = 9190; % eV
+% fluxip = 5000000; % x-rays
+% airTsam = 0.8807;
+% airTYAG = 0.8293;
+% pathSam = 0.17; % m
+% pathYAG = 0.25; % m
+% waterT = 0.9934;
+% openingAngle = 10e-3; % rad
+% YAGT = 0.1138;
+
+
+%% Checked and Updated by Sabine 2026/02/24
+%% Default values that are now commented out are changed to inputs to the function.
+
+
+
+%% All values relate to a MAKO G-507C camera with a SONY IMX264 sensor
+% Use a 2/3" rated C-mount lens with f/1.4
+f_number = 1.4; 
+flange_focal_distance = 0.017526;  % in m
+lens_focal_distance = 0.05; % in m 
+%% Camera specs
+pixel_size = 3.45e-6; % pixel size, m
+pixel_area = pixel_size^2; % area of one pixel, m^2
+detector_horizontal = 2464; % horizontal pixels
+detector_vertical = 2056; % vertical pixels
+well_depth = 10600; % per pixel
+quantum_efficiency = 0.64;
+number_bits = 12;
+total_counts = 2^number_bits;
+total_pixels = detector_vertical*detector_horizontal; %  = pHor*pVer; % # of pixels
+detector_area = pixel_area * total_pixels; % actual area of sensor
+
+
+%% Experimental Parameters
+%distance_IP_window = 4.8; % in m 
+%distance_window_sample = 0.17; % in m
+%distance_sample_YAG = 0.25; % in m
+%distance_YAG_lens = 0.164; % in m
+YAG_radius = YAG_diameter/2; % m, radius of actual YAG
+%YAG_fluorescence_emission = 30; % # of green photons emitted per incident eV of X-rays
+%opening_angle = 0.010; %10 mradians
+%flux_IP_per_pulse = 1e5;
+%number_pulses = 1;
+
+
+%% The following are specific to 9.3 keV!
+%xray_photon_energy = 9300 ; % in eV
+%window_transmission = 0.902; % 100um diamond window
+%air_linear_attenuation_coeff = 1.08; % in 1/m
+%water_linear_attenuation_coeff = 480; % in 1/m
+%YAG_transmission = 0.341; % 50um YAG
+
+xray_energy_keys = num2cell([9300, 12000, 15000, 18000, 20000, 23000]);
+attenuation_coefficients = {[0.902, 12, 18, 0.341], [0.95, 1.8, 16, 0.587], [0.972, 1.5, 15, 0.750], [0.0981, 1.2, 14, 0.388], [0.985, 1.1, 14, 0.484], [0.987, 1.0, 13, 0.607]};
+transmission_matrix = containers.Map(xray_energy_keys, attenuation_coefficients);
+
+if ~exist('xray_photon_energy','var')
+    error('xray_photon_energy is not defined.');
+end
+
+if ~isKey(transmission_matrix, xray_photon_energy)
+    error('No entry for photon energy %g in the lookup table.', xray_photon_energy);
+end
+
+
+selection = transmission_matrix(xray_photon_energy);
+window_transmission = selection(1);
+air_linear_attenuation_coeff = selection(2);
+water_linear_attenuation_coeff = selection(3);
+YAG_transmission = selection(4);
+
+
+
+%% Sample Parameters
+%sample_diameter = 0.005; % in m 
+sample_radius = sample_diameter/2; % m (sample space)
+%sample_thickness = 1e-3;
+
+
+%% General variables in case needed
+h = 6.626070041e-34; % Planck's constant in m^2*kg/s
+c = 3e8; % speed of light, m/s
+% range of lambda for YAG = 530 - 550 nm
+
+
+
+
+%solidAngleRatio = 0.0123/(4*pi); % solid angle ratio due to f-number 4
+%
+% Sabine: I don't think the above line is correct (it's from Trixia's code) 
+% (f-number (N) = focal length (f)/entrance pupil diameter (D)); 
+% tan(theta) = 1/2*D/f
+% for small theta, thete approx tan(theta)
+% theta approx 1/2N
+% solid_angle = 2pi(1-cos(theta))
+% cos(theta) appox 1 - theta^2/2
+% solid_angle = pi*theta^2 = pi*1/(4N^2)
+% solid_angle_ratio = solid_angle/4pi = 1/(16N^2)
+solid_angle_ratio = 1/16*f_number^(-2);
+
+
+%% Pixel calculations with Field of View (FOV)
+% YAG-camera distance, dist = (FOV + 18.913)/0.091; % mm
+% Horizontal field of view
+% FOV_horizontal = distYAGtoCam*0.091 - 0.018913; % m
+% FOVv = FOVh/1.2; % m
+
+%% Sabine: I'm going to check this.... (it's from Trixia's code) 
+% FOV = sensor_size/magnification(M)
+% M = image size/object size = (dist_source_sample + dist_sample_det)/dist_source_sample
+
+lens_magnification = lens_focal_distance/(distance_YAG_lens-lens_focal_distance); 
+if lens_magnification < 0
+    error("the focal length of the lens is larger than the distance of your YAG:")
+end
+
+FOV_horizontal = pixel_size*detector_horizontal/lens_magnification; 
+FOV_vertical = pixel_size*detector_vertical/lens_magnification;
+effective_pixel_size_horizontal = FOV_horizontal/detector_horizontal; 
+effective_pixel_size_vertical = FOV_vertical/detector_horizontal; 
+
+xray_magnification = (distance_IP_window + distance_window_sample + distance_sample_YAG)/(distance_IP_window + distance_window_sample);
+
+
+%% Initialization of pixel matrices
+n_row = detector_horizontal; % Camera image number of rows
+n_col = detector_vertical; % Camera image number of columns
+x0 = n_col/2; y0 = n_row/2; % Center of image
+
+x_vec = linspace(-x0,x0,n_col); % Column vector of x values for each pixel
+y_vec = linspace(y0,-y0,n_row)'; % Row vector of y values for each pixel
+
+x_mat = repmat(x_vec,n_row,1); % Matrix of x values
+y_mat = repmat(y_vec,1,n_col); % Matrix of y values
+
+%% Creating r-distance matrix
+% Matrix for distance of each pixel from center
+radial_distance_matrix = sqrt(x_mat.^2 + y_mat.^2); 
+
+% Matrix of radial distances at camera (image space)
+cmos_radial_distance_matrix = radial_distance_matrix.*pixel_size; 
+
+% Matrix of radial distances at YAG (object space)
+YAG_radial_distance_matrix = cmos_radial_distance_matrix/lens_magnification; 
+
+% figure; imagesc(yagrmat); colorbar; % Show matrix of radial distances
+% title('Radial distance (m) from camera center (object space)');
+% xlabel('Pixels'); ylabel('Pixels');
+%% Creating YAG filter matrix
+% Filter results in 1's where condition = true
+YAG_filter = YAG_radial_distance_matrix < YAG_radius; 
+
+% figure;imagesc(yagrmat.*yagfilt); colorbar; % Show matrix of radial distances
+% title('Radial distance (m) limited to YAG edge (object space)');
+% xlabel('Pixels'); ylabel('Pixels');
+%% Creating beam filter matrix
+% Beam size at the YAG screen
+distance_IP_YAG = distance_IP_window + distance_window_sample + distance_sample_YAG;
+beam_radius_YAG = (tan(0.5*opening_angle)*distance_IP_YAG); % m; opeining angle in radians
+beam_radius_sample = (tan(0.5*opening_angle)*(distance_IP_window+distance_window_sample));
+
+beam_filter = YAG_radial_distance_matrix < beam_radius_YAG; % Select pixels within beam
+
+%% X-rays/pixel calculations
+% Attenuation of photons due to transport at sample
+air_transmission = exp(-air_linear_attenuation_coeff*(distance_window_sample+distance_sample_YAG)); 
+total_transmission = window_transmission*air_transmission; 
+flux_per_pulse_YAG = flux_IP_per_pulse*total_transmission;
+total_flux_at_YAG = number_pulses * flux_per_pulse_YAG; 
+YAG_pixel_size = pixel_size/lens_magnification; % Pixel size at YAG (object space)
+
+if (beam_radius_YAG < YAG_radius)
+    YAG_dose = total_flux_at_YAG/(pi*beam_radius_YAG^2); % X-rays/unit area at YAG
+    YAG_pixel_dose = YAG_dose*YAG_pixel_size^2; % X-rays/pixel at YAG
+    total_flux_on_YAG = total_flux_at_YAG;
+else
+    fprintf('Your beam is larger than the YAG. Do you really think we should be wasting photons?')
+    dose_fraction = (YAG_radius/beam_radius_YAG)^2;
+    YAG_dose = dose_fraction*total_flux_at_YAG/(pi*beam_radius_YAG^2); % X-rays/unit area at YAG
+    YAG_pixel_dose = YAG_dose*YAG_pixel_size^2;
+    total_flux_on_YAG = dose_fraction*total_flux_at_YAG; 
+end
+
+% YAG absorption %
+YAG_absorption = 1 - YAG_transmission;
+% Total photon energy absorbed
+YAG_photons_emitted = YAG_absorption*total_flux_on_YAG*xray_photon_energy*YAG_fluorescence_emission; % eV/pixel
+% # of photons emitted by YAG
+sensor_excited_photons_total = YAG_photons_emitted*solid_angle_ratio; % photons/pixel
+% # counts per pixel
+sensor_counts_total = sensor_excited_photons_total*quantum_efficiency*(total_counts/well_depth); 
+
+
+%% Start worrying about the sample. 
+% Pixel distances matrix at sample space
+sample_radial_distance_matrix = cmos_radial_distance_matrix /lens_magnification/xray_magnification;
+% Filter matrix to limit pixels to sample
+sample_filter = sample_radial_distance_matrix < sample_radius; 
+% Transmission due to sample attenuation
+sample_transmission = ones(size(sample_radial_distance_matrix)); % Make an transmission matrix at the sample location
+
+if sample_type == "Tumor Contrast"
+    contrast_factor = 0.06; 
+else
+    contrast_factor = 1;
+end
+
+sample_transmission(sample_filter) = exp(-water_linear_attenuation_coeff*contrast_factor*sample_thickness); % Apply attenuation through sample
+
+%%  Displaying intensities
+
+pixel_YAG_only_intensity = YAG_pixel_dose.* (YAG_filter & beam_filter); % X-ray/pixel intensity on YAG with no sample 
+
+mask = YAG_filter & beam_filter;
+number_of_pixels_excited = nnz(mask);
+sensor_intensities = zeros(size(mask));
+
+sensor_intensities(mask) = sensor_counts_total/number_of_pixels_excited; % X-ray/pixel intensity on YAG with no sample 
+sensor_intensities_with_sample = sensor_intensities.*sample_transmission;
+
+% figure;
+% imagesc(sensor_intensities);
+% axis image;
+% colorbar; 
+% figure;
+% imagesc(sensor_intensities_with_sample);
+% axis image;
+% colorbar; 
+% figure;
+% imshow(mask);
