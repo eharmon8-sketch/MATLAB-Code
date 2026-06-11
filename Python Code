@@ -174,35 +174,46 @@ cmos_radial_distance_matrix = radial_distance_matrix * pixel_size
 YAG_radial_distance_matrix = cmos_radial_distance_matrix / lens_magnification 
 
 
-import matplotlib.pyplot as plt
-
-# Plotting block with figure images, colorbar, and matrix of radial distances
-plt.figure()
-plt.imshow(yagrmat, aspect='auto')
-plt.colorbar()
-plt.title('Radial distance (m) from camera center (object space)')
-plt.xlabel('Pixels'), plt.ylabel('Pixels') 
-plt.show()
-
-YAG_filter = (YAG_radial_distance_matrix < YAG_radius) * 1
-
-
 import numpy as np
 import matplotlib.pyplot as plt
 
-# 1. Visualization
-plt.imshow(yagrmat * yagfilt)
-plt.colorbar(label='Radial distance (m) limited to YAG edge (object space)')
-plt.xlabel('Pixels')
-plt.ylabel('Pixels')
-plt.show()
+# 1. YAG filter matrix
+# Selects pixels within the physical YAG crystal radius
+YAG_filter = YAG_radial_distance_matrix < YAG_radius 
+
 
 # 2. Beam filter matrix
+# Total distance from Interaction Point (IP) to YAG screen
 distance_IP_YAG = distance_IP_window + distance_window_sample + distance_sample_YAG
-beam_radius_YAG = np.tan(0.5 * opening_angle) * distance_IP_YAG) # m  opening angle in radians
-beam_radius_sample = np.tan(0.5 * opening_angle) * (distance_IP_window + distance_window_sample) # opening angle in radians
 
-beam_filter = YAG_radial_distance_matrix < beam_radius_YAG # Select pixels within beam
+# Beam radii calculations with opening_angle in radians
+beam_radius_YAG = np.tan(0.5 * opening_angle) * distance_IP_YAG
+beam_radius_sample = np.tan(0.5 * opening_angle) * (distance_IP_window + distance_window_sample)
+
+# Select pixels within the beam profile
+beam_filter = YAG_radial_distance_matrix < beam_radius_YAG 
+
+
+# 3. Visualizations
+
+# Plot 1: Raw Radial Distances
+plt.figure()
+plt.imshow(YAG_radial_distance_matrix)
+plt.colorbar()
+plt.title('Radial distance (m) from camera center (object space)')
+plt.xlabel('Pixels')
+plt.ylabel('Pixels')
+
+# Plot 2: Radial Distances Limited to YAG Edge
+plt.figure()
+plt.imshow(YAG_radial_distance_matrix * YAG_filter)
+plt.colorbar()
+plt.title('Radial distance (m) limited to YAG edge (object space)')
+plt.xlabel('Pixels')
+plt.ylabel('Pixels')
+
+# Both figures display open to the screen
+plt.show()
 
 
 # X-rays/pixel calculations
