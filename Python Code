@@ -1,106 +1,108 @@
-function [effective_pixel_size_horizontal, effective_pixel_size_vertical, FOV_horizontal ,FOV_vertical ,lens_magnification, beam_radius_YAG, beam_radius_sample, sensor_intensities, sensor_intensities_with_sample] = XPCI_propagation(sample_type, xray_photon_energy, YAG_diameter, YAG_fluorescence_emission, flux_IP_per_pulse, number_pulses, opening_angle, sample_diameter, sample_thickness, distance_IP_window, distance_window_sample,  distance_sample_YAG,distance_YAG_lens)
-%% Function Inputs
+function (effective_pixel_size_horizontal, effective_pixel_size_vertical, FOV_horizontal ,FOV_vertical ,lens_magnification, beam_radius_YAG, beam_radius_sample, sensor_intensities, sensor_intensities_with_sample] = XPCI_propagation(sample_type, xray_photon_energy, YAG_diameter, YAG_fluorescence_emission, flux_IP_per_pulse, number_pulses, opening_angle, sample_diameter, sample_thickness, distance_IP_window, distance_window_sample,  distance_sample_YAG,distance_YAG_lens)
+# Function Inputs
 
 
-%% Function Outputs
+# Function Outputs
 
 
-%% Parameters that were used by Trixia
-% samD = 0.005; % m
-% distYAGtoCam = 0.5; % m
-% energy = 9190; % eV
-% fluxip = 5000000; % x-rays
-% airTsam = 0.8807;
-% airTYAG = 0.8293;
-% pathSam = 0.17; % m
-% pathYAG = 0.25; % m
-% waterT = 0.9934;
-% openingAngle = 10e-3; % rad
-% YAGT = 0.1138;
-
-
-%% Checked and Updated by Sabine 2026/02/24
-%% Default values that are now commented out are changed to inputs to the function.
+# Parameters that were used by Trixia
+# samD = 0.005  # m
+# distYAGtoCam = 0.5  # m
+# energy = 9190  # eV
+# fluxip = 5000000  # x-rays
+# airTsam = 0.8807
+# airTYAG = 0.8293
+# pathSam = 0.17  # m
+# pathYAG = 0.25  # m
+# waterT = 0.9934
+# openingAngle = 10e-3  # rad
+# YAGT = 0.1138
 
 
 
-%% All values relate to a MAKO G-507C camera with a SONY IMX264 sensor
-% Use a 2/3" rated C-mount lens with f/1.4
-f_number = 1.4; 
-flange_focal_distance = 0.017526;  % in m
-lens_focal_distance = 0.05; % in m 
-%% Camera specs
-pixel_size = 3.45e-6; % pixel size, m
-pixel_area = pixel_size^2; % area of one pixel, m^2
-detector_horizontal = 2464; % horizontal pixels
-detector_vertical = 2056; % vertical pixels
-well_depth = 10600; % per pixel
-quantum_efficiency = 0.64;
-number_bits = 12;
-total_counts = 2^number_bits;
-total_pixels = detector_vertical*detector_horizontal; %  = pHor*pVer; % # of pixels
+# All values relate to a MAKO G-507C camera with a SONY IMX264 sensor
+# Use a 2/3" rated C-mount lens with f/1.4
+f_number = 1.4 
+flange_focal_distance = 0.017526  # in m
+lens_focal_distance = 0.05  # in m 
+# Camera specs
+pixel_size = 3.45e-6  # pixel size, m
+pixel_area = pixel_size ** 2  # area of one pixel, m**2
+detector_horizontal = 2464  # horizontal pixels
+detector_vertical = 2056  # vertical pixels
+well_depth = 10600  # per pixel
+quantum_efficiency = 0.64
+number_bits = 12
+total_counts = 2 ** number_bits
+total_pixels = detector_vertical * detector_horizontal  #  = pHor*pVer; number of pixels
 detector_area = pixel_area * total_pixels; % actual area of sensor
 
 
-%% Experimental Parameters
-%distance_IP_window = 4.8; % in m 
-%distance_window_sample = 0.17; % in m
-%distance_sample_YAG = 0.25; % in m
-%distance_YAG_lens = 0.164; % in m
-YAG_radius = YAG_diameter/2; % m, radius of actual YAG
-%YAG_fluorescence_emission = 30; % # of green photons emitted per incident eV of X-rays
-%opening_angle = 0.010; %10 mradians
-%flux_IP_per_pulse = 1e5;
-%number_pulses = 1;
+# Experimental Parameters
+# distance_IP_window = 4.8  # in m 
+# distance_window_sample = 0.17  # in m
+# distance_sample_YAG = 0.25  # in m
+# distance_YAG_lens = 0.164  # in m
+YAG_radius = YAG_diameter / 2  # m, radius of actual YAG
+# YAG_fluorescence_emission = 30  # number of green photons emitted per incident eV of X-rays
+# opening_angle = 0.010  # 10 mradians
+# flux_IP_per_pulse = 1e5
+# number_pulses = 1
 
 
-%% The following are specific to 9.3 keV!
-%xray_photon_energy = 9300 ; % in eV
-%window_transmission = 0.902; % 100um diamond window
-%air_linear_attenuation_coeff = 1.08; % in 1/m
-%water_linear_attenuation_coeff = 480; % in 1/m
-%YAG_transmission = 0.341; % 50um YAG
+# The following are specific to 9.3 keV
+# xray_photon_energy = 9300  # in eV
+# window_transmission = 0.902  # 100um diamond window
+# air_linear_attenuation_coeff = 1.08  # in 1/m
+# water_linear_attenuation_coeff = 480  # in 1/m
+# YAG_transmission = 0.341  # 50um YAG
 
-xray_energy_keys = num2cell([9300, 12000, 15000, 18000, 20000, 23000]);
-attenuation_coefficients = {[0.902, 12, 18, 0.341], [0.95, 1.8, 16, 0.587], [0.972, 1.5, 15, 0.750], [0.0981, 1.2, 14, 0.388], [0.985, 1.1, 14, 0.484], [0.987, 1.0, 13, 0.607]};
-transmission_matrix = containers.Map(xray_energy_keys, attenuation_coefficients);
+xray_energy_keys = [9300, 12000, 15000, 18000, 20000, 23000]
+attenuation_coefficients = [
+    [0.902, 12, 18, 0.341],
+    [0.95, 1.8, 16, 0.587],
+    [0.972, 1.5, 15, 0.750],
+    [0.0981, 1.2, 14, 0.388],
+    [0.985, 1.1, 14, 0.484],
+    [0.987, 1.0, 13, 0.607]
+]
+transmission_matrix = dict(zip(xray_energy_keys, attenuation_coefficients))
 
-if ~exist('xray_photon_energy','var')
-    error('xray_photon_energy is not defined.');
-end
+if 'xray_photon_energy' not in locals ():
+    sys.exit('Error: xray_photon_energy is not defined.')
 
-if ~isKey(transmission_matrix, xray_photon_energy)
-    error('No entry for photon energy %g in the lookup table.', xray_photon_energy);
-end
-
-
-selection = transmission_matrix(xray_photon_energy);
-window_transmission = selection(1);
-air_linear_attenuation_coeff = selection(2);
-water_linear_attenuation_coeff = selection(3);
-YAG_transmission = selection(4);
-
-
-
-%% Sample Parameters
-%sample_diameter = 0.005; % in m 
-sample_radius = sample_diameter/2; % m (sample space)
-%sample_thickness = 1e-3;
-
-
-%% General variables in case needed
-h = 6.626070041e-34; % Planck's constant in m^2*kg/s
-c = 3e8; % speed of light, m/s
-% range of lambda for YAG = 530 - 550 nm
+if 'xray_photon_energy' not in transmission_matrix:
+    sys.exit(f'Error: No entry for photon energy {xray_photon_energy} in the lookup table.') 
 
 
 
+selection = transmission_matrix[xray_photon_energy]
+window_transmission = selection[1]
+air_linear_attenuation_coeff = selection[2]
+water_linear_attenuation_coeff = selection[3]
+YAG_transmission = selection[4]
 
-%solidAngleRatio = 0.0123/(4*pi); % solid angle ratio due to f-number 4
-%
-% Sabine: I don't think the above line is correct (it's from Trixia's code) 
-% (f-number (N) = focal length (f)/entrance pupil diameter (D)); 
-% tan(theta) = 1/2*D/f
+
+
+# Sample Parameters
+# sample_diameter = 0.005  # in m 
+sample_radius = sample_diameter / 2  # sample space in m
+# sample_thickness = 1e-3
+
+
+# General variables in case needed
+h = 6.626070041e-34  # Planck's constant in m ** 2 in kg / s
+c = 3e8  # speed of light in m / s
+# range of lambda for YAG = 530 - 550 nm
+
+
+
+
+# solidAngleRatio = 0.0123 / (4*pi)  # solid angle ratio due to f-number 4
+#
+# Sabine: I don't think the above line is correct (it's from Trixia's code) 
+# f-number (N) = focal length (f) / entrance pupil diameter (D) 
+# tan(theta) = (1/2) * (D/f)
 % for small theta, thete approx tan(theta)
 % theta approx 1/2N
 % solid_angle = 2pi(1-cos(theta))
