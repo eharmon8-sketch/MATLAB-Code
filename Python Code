@@ -187,24 +187,26 @@ plt.show()
 YAG_filter = (YAG_radial_distance_matrix < YAG_radius) * 1
 
 
-import matplotlib
+import numpy as np
+import matplotlib.pyplot as plt
+
+# 1. Visualization
+plt.imshow(yagrmat * yagfilt)
+plt.colorbar(label='Radial distance (m) limited to YAG edge (object space)')
+plt.xlabel('Pixels')
+plt.ylabel('Pixels')
+plt.show()
+
+# 2. Beam filter matrix
+distance_IP_YAG = distance_IP_window + distance_window_sample + distance_sample_YAG
+beam_radius_YAG = np.tan(0.5 * opening_angle) * distance_IP_YAG) # m  opening angle in radians
+beam_radius_sample = np.tan(0.5 * opening_angle) * (distance_IP_window + distance_window_sample) # opening angle in radians
+
+beam_filter = YAG_radial_distance_matrix < beam_radius_YAG # Select pixels within beam
 
 
-% figure;imagesc(yagrmat.*yagfilt); colorbar; % Show matrix of radial distances
-% title('Radial distance (m) limited to YAG edge (object space)');
-% xlabel('Pixels'); ylabel('Pixels');
-%% Creating beam filter matrix
-% Beam size at the YAG screen
-distance_IP_YAG = distance_IP_window + distance_window_sample + distance_sample_YAG;
-beam_radius_YAG = (tan(0.5*opening_angle)*distance_IP_YAG); % m; opeining angle in radians
-beam_radius_sample = (tan(0.5*opening_angle)*(distance_IP_window+distance_window_sample));
-
-
-beam_filter = YAG_radial_distance_matrix < beam_radius_YAG; % Select pixels within beam
-
-
-%% X-rays/pixel calculations
-% Attenuation of photons due to transport at sample
+# X-rays/pixel calculations
+# Attenuation of photons due to transport at sample
 air_transmission = exp(-air_linear_attenuation_coeff*(distance_window_sample+distance_sample_YAG)); 
 total_transmission = window_transmission*air_transmission; 
 flux_per_pulse_YAG = flux_IP_per_pulse*total_transmission;
