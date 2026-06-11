@@ -105,7 +105,7 @@ c = 3e8  # speed of light in m / s
 # tan(theta) = 0.5 * (D/f)
 # for small theta, theta is approximately tan(theta)
 # theta is approx. 0.5 * N
-# solid_angle = 2 * math.pi * (1 - math.cos(theta))
+% solid_angle = 2pi(1-cos(theta))
 # cos(theta) is approx. 1 - (theta ** 2) / 2
 # solid_angle = pi * (theta ** 2) 
 # Given theta is approx. 1 / (2 * N), this simplifies to: pi / (4 * N ** 2)
