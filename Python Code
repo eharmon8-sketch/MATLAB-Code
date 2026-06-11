@@ -271,23 +271,27 @@ else:
     contrast_factor = 1
 
 
-sample_transmission(sample_filter) = exp(-water_linear_attenuation_coeff * contrast_factor*sample_thickness)  # Apply attenuation through sample
+import numpy as np
+import matplotlib.pyplot as plt
 
+# Apply attenuation through sample
+sample_transmission[sample_filter] = np.exp(-water_linear_attenuation_coeff * contrast_factor * sample_thickness)
 
-#  Displaying intensities
+# Displaying intensities
 
-
-pixel_YAG_only_intensity = YAG_pixel_dose. * (YAG_filter & beam_filter)  # X-ray/pixel intensity on YAG with no sample 
-
+# X-ray/pixel intensity on YAG with no sample
+pixel_YAG_only_intensity = YAG_pixel_dose * (YAG_filter & beam_filter)
 
 mask = YAG_filter & beam_filter
-number_of_pixels_excited = nnz(mask)
-sensor_intensities = zeros(size(mask))
+number_of_pixels_excited = np.count_nonzero(mask)
+sensor_intensities = np.zeros_like(masks, dtype=float)
+
+# X-ray/pixel intensity on YAG with no sample
+sensor_intensities[mask] = sensor_counts_total / number_of_pixels_excited
+sensor_intensities_with_sample = sensor_intensities * sample_transmission
 
 
-sensor_intensities(mask) = sensor_counts_total / number_of_pixels_excited  # X-ray / pixel intensity on YAG with no sample 
-sensor_intensities_with_sample = sensor_intensities. * sample_transmission
-
+#Visualizations
 
 # figure
 # imagesc(sensor_intensities)
