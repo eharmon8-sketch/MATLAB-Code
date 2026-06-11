@@ -109,13 +109,13 @@ c = 3e8  # speed of light in m / s
 # cos(theta) is approx. 1 - (theta ** 2) / 2
 # solid_angle = pi * (theta ** 2) 
 # Given theta is approx. 1 / (2 * N), this simplifies to: pi / (4 * N ** 2)
-# solid_angle_ratio = solid_angle / (4 * pi) 
-# Given = 1/(16N^2)
-solid_angle_ratio = 1/16*f_number^(-2);
+# solid_angle_ratio = solid_angle / (4 * pi) = 1 / (16 * N ** 2)
+solid_angle_ratio = (1 / 16) * (f_number ** -2)
 
 
-%% Pixel calculations with Field of View (FOV)
-% YAG-camera distance, dist = (FOV + 18.913)/0.091; % mm
+# Pixel calculations with Field of View 
+# Field_of_view = [FOV]
+# YAG_camera_distance = (FOV + 18.913) / 0.091  # in mm 
 % Horizontal field of view
 % FOV_horizontal = distYAGtoCam*0.091 - 0.018913; % m
 % FOVv = FOVh/1.2; % m
