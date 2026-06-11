@@ -19,7 +19,6 @@ function (effective_pixel_size_horizontal, effective_pixel_size_vertical, FOV_ho
 # YAGT = 0.1138
 
 
-
 # All values relate to a MAKO G-507C camera with a SONY IMX264 sensor
 # Use a 2/3" rated C-mount lens with f/1.4
 f_number = 1.4 
@@ -57,6 +56,7 @@ YAG_radius = YAG_diameter / 2  # m, radius of actual YAG
 # water_linear_attenuation_coeff = 480  # in 1/m
 # YAG_transmission = 0.341  # 50um YAG
 
+
 xray_energy_keys = [9300, 12000, 15000, 18000, 20000, 23000]
 attenuation_coefficients = [
     [0.902, 12, 18, 0.341],
@@ -68,6 +68,7 @@ attenuation_coefficients = [
 ]
 transmission_matrix = dict(zip(xray_energy_keys, attenuation_coefficients))
 
+
 if 'xray_photon_energy' not in locals ():
     sys.exit('Error: xray_photon_energy is not defined.')
 
@@ -75,13 +76,11 @@ if 'xray_photon_energy' not in transmission_matrix:
     sys.exit(f'Error: No entry for photon energy {xray_photon_energy} in the lookup table.') 
 
 
-
 selection = transmission_matrix[xray_photon_energy]
 window_transmission = selection[1]
 air_linear_attenuation_coeff = selection[2]
 water_linear_attenuation_coeff = selection[3]
 YAG_transmission = selection[4]
-
 
 
 # Sample Parameters
@@ -94,8 +93,6 @@ sample_radius = sample_diameter / 2  # sample space in m
 h = 6.626070041e-34  # Planck's constant in m ** 2 in kg / s
 c = 3e8  # speed of light in m / s
 # range of lambda for YAG = 530 - 550 nm
-
-
 
 
 # solidAngleRatio = 0.0123 / (4*pi)  # solid angle ratio due to f-number 4
@@ -113,16 +110,14 @@ c = 3e8  # speed of light in m / s
 solid_angle_ratio = (1 / 16) * (f_number ** -2)
 
 
-# Pixel calculations with Field of View 
-# Field_of_view = [FOV]
-# YAG_camera_distance = (FOV + 18.913) / 0.091  # in mm 
-% Horizontal field of view
-% FOV_horizontal = distYAGtoCam*0.091 - 0.018913; % m
-% FOVv = FOVh/1.2; % m
+# Pixel calculations with Field of View (FOV)
+# dist = (FOV + 18.913) / 0.091 # mm
+# Horizontal field of view (FOV_horizontal)
+# FOV_horizontal = distYAGtoCam * 0.091 - 0.018913  # m
+# FOV = FOV_horizontal / 1.2  # m
 
-%% Sabine: I'm going to check this.... (it's from Trixia's code) 
-% FOV = sensor_size/magnification(M)
-% M = image size/object size = (dist_source_sample + dist_sample_det)/dist_source_sample
+# FOV = sensor_size / magnification (M)
+# M = image size/object size = (dist_source_sample + dist_sample_det)/dist_source_sample
 
 lens_magnification = lens_focal_distance/(distance_YAG_lens-lens_focal_distance); 
 if lens_magnification < 0
