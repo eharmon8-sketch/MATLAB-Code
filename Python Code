@@ -102,14 +102,15 @@ c = 3e8  # speed of light in m / s
 #
 # Sabine: I don't think the above line is correct (it's from Trixia's code) 
 # f-number (N) = focal length (f) / entrance pupil diameter (D) 
-# tan(theta) = 0.5 * (D/f)
+# tan(theta) = 0.5 * (D / f)
 # for small theta, theta is approximately tan(theta)
 # theta is approx. 0.5 * N
-% solid_angle = 2pi(1-cos(theta))
+# solid_angle = 2 * pi * (1 - cos(theta))
 # cos(theta) is approx. 1 - (theta ** 2) / 2
 # solid_angle = pi * (theta ** 2) 
 # Given theta is approx. 1 / (2 * N), this simplifies to: pi / (4 * N ** 2)
-# solid_angle_ratio = solid_angle/4pi = 1/(16N^2)
+# solid_angle_ratio = solid_angle / (4 * pi) 
+# Given = 1/(16N^2)
 solid_angle_ratio = 1/16*f_number^(-2);
 
 
