@@ -119,15 +119,22 @@ solid_angle_ratio = (1 / 16) * (f_number ** -2)
 # M = image_size / object_size = (dist_source_sample + dist_sample_detector) / dist_source_sample
 
 
+import sys
+# Calculate lens magnification 
 lens_magnification = lens_focal_distance / (distance_YAG_lens - lens_focal_distance)
-if lens_magnification < 0
-    sys.exit('Error: the focal length of the lens is larger than the distance of your YAG.')
+
+# Validate opitcal geometry
+if lens_magnification < 0:
+    sys.exit('Error:the focal length of the lens is larger than the distance of your YAG.')
 
 
-FOV_horizontal = pixel_size*detector_horizontal/lens_magnification; 
-FOV_vertical = pixel_size*detector_vertical/lens_magnification;
-effective_pixel_size_horizontal = FOV_horizontal/detector_horizontal; 
-effective_pixel_size_vertical = FOV_vertical/detector_horizontal; 
+# Field of View (FOV) calculation
+FOV_horizontal = (pixel_size * detector_horizontal) / lens_magnification 
+FOV_vertical = (pixel_size * detector_vertical) / lens_magnification
+
+# Effective pixel size calculation
+effective_pixel_size_horizontal = FOV_horizontal / detector_horizontal
+effective_pixel_size_vertical = FOV_vertical / detector_horizontal 
 
 
 xray_magnification = (distance_IP_window + distance_window_sample + distance_sample_YAG)/(distance_IP_window + distance_window_sample);
