@@ -187,6 +187,8 @@ plt.show()
 YAG_filter = (YAG_radial_distance_matrix < YAG_radius) * 1
 
 
+import matplotlib
+
 
 % figure;imagesc(yagrmat.*yagfilt); colorbar; % Show matrix of radial distances
 % title('Radial distance (m) limited to YAG edge (object space)');
