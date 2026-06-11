@@ -134,45 +134,58 @@ FOV_vertical = (pixel_size * detector_vertical) / lens_magnification
 
 # Effective pixel size calculation
 effective_pixel_size_horizontal = FOV_horizontal / detector_horizontal
-effective_pixel_size_vertical = FOV_vertical / detector_horizontal 
+effective_pixel_size_vertical = FOV_vertical / detector_vertical 
+
+# Geometric X-ray magnification calculation
+xray_magnification = (distance_IP_window + distance_window_sample + distance_sample_YAG) / (distance_IP_window + distance_window_sample)
 
 
-xray_magnification = (distance_IP_window + distance_window_sample + distance_sample_YAG)/(distance_IP_window + distance_window_sample);
+# Initialization of pixel matrices
+n_row = detector_horizontal  # Camera image number of rows (vertical)
+n_col = detector_vertical  # Camera image number of columns (horizontal)
+
+# Center of image (as floats for precise optical geometry)
+x0 = n_col / 2 
+y0 = n_row / 2
 
 
-%% Initialization of pixel matrices
-n_row = detector_horizontal; % Camera image number of rows
-n_col = detector_vertical; % Camera image number of columns
-x0 = n_col/2; y0 = n_row/2; % Center of image
+import numpy as np
+
+# Create pixel coordinate vectors centered around (0,0)
+x_vec = np.arange(n_col) - x0 + 0.5
+y_vec = y0 - 0.5 - np.arange(n_row) # Inverted to positive y points upwards
 
 
-x_vec = linspace(-x0,x0,n_col); % Column vector of x values for each pixel
-y_vec = linspace(y0,-y0,n_row)'; % Row vector of y values for each pixel
+import numpy as np
+
+x_mat, y_mat = np.meshgrid(x_vec, y_vec)
 
 
-x_mat = repmat(x_vec,n_row,1); % Matrix of x values
-y_mat = repmat(y_vec,1,n_col); % Matrix of y values
+# Creating r-distance matrix
+# Matrix for distance of each pixel from center
+radial_distance_matrix = sqrt(x_mat**2 + y_mat**2)
 
 
-%% Creating r-distance matrix
-% Matrix for distance of each pixel from center
-radial_distance_matrix = sqrt(x_mat.^2 + y_mat.^2); 
+# Matrix of radial distances at camera (image space)
+cmos_radial_distance_matrix = radial_distance_matrix * pixel_size
 
 
-% Matrix of radial distances at camera (image space)
-cmos_radial_distance_matrix = radial_distance_matrix.*pixel_size; 
+# Matrix of radial distances at YAG (object space)
+YAG_radial_distance_matrix = cmos_radial_distance_matrix / lens_magnification 
 
 
-% Matrix of radial distances at YAG (object space)
-YAG_radial_distance_matrix = cmos_radial_distance_matrix/lens_magnification; 
+import matplotlib.pyplot as plt
 
+# Plotting block with figure images, colorbar, and matrix of radial distances
+plt.figure()
+plt.imshow(yagrmat, aspect='auto')
+plt.colorbar()
+plt.title('Radial distance (m) from camera center (object space)')
+plt.xlabel('Pixels'), plt.ylabel('Pixels') 
+plt.show()
 
-% figure; imagesc(yagrmat); colorbar; % Show matrix of radial distances
-% title('Radial distance (m) from camera center (object space)');
-% xlabel('Pixels'); ylabel('Pixels');
-%% Creating YAG filter matrix
-% Filter results in 1's where condition = true
-YAG_filter = YAG_radial_distance_matrix < YAG_radius; 
+YAG_filter = (YAG_radial_distance_matrix < YAG_radius) * 1
+
 
 
 % figure;imagesc(yagrmat.*yagfilt); colorbar; % Show matrix of radial distances
