@@ -218,68 +218,75 @@ plt.show()
 
 # X-rays/pixel calculations
 # Attenuation of photons due to transport at sample
-air_transmission = exp(-air_linear_attenuation_coeff*(distance_window_sample+distance_sample_YAG)); 
-total_transmission = window_transmission*air_transmission; 
-flux_per_pulse_YAG = flux_IP_per_pulse*total_transmission;
-total_flux_at_YAG = number_pulses * flux_per_pulse_YAG; 
-YAG_pixel_size = pixel_size/lens_magnification; % Pixel size at YAG (object space)
+air_transmission = np.exp(-air_linear_attenuation_coeff * (distance_window_sample+distance_sample_YAG)) 
+total_transmission = window_transmission * air_transmission 
+flux_per_pulse_YAG = flux_IP_per_pulse * total_transmission
+total_flux_at_YAG = number_pulses * flux_per_pulse_YAG 
+YAG_pixel_size = pixel_size / lens_magnification  # Pixel size at YAG (object space)
 
 
-if (beam_radius_YAG < YAG_radius)
-    YAG_dose = total_flux_at_YAG/(pi*beam_radius_YAG^2); % X-rays/unit area at YAG
-    YAG_pixel_dose = YAG_dose*YAG_pixel_size^2; % X-rays/pixel at YAG
-    total_flux_on_YAG = total_flux_at_YAG;
-else
-    fprintf('Your beam is larger than the YAG. Do you really think we should be wasting photons?')
-    dose_fraction = (YAG_radius/beam_radius_YAG)^2;
-    YAG_dose = dose_fraction*total_flux_at_YAG/(pi*beam_radius_YAG^2); % X-rays/unit area at YAG
-    YAG_pixel_dose = YAG_dose*YAG_pixel_size^2;
-    total_flux_on_YAG = dose_fraction*total_flux_at_YAG; 
-end
+if beam_radius_YAG < YAG_radius:
+    YAG_dose = total_flux_at_YAG / (np.pi * beam_radius_YAG**2)  # X-rays/unit area at YAG
+    YAG_pixel_dose = YAG_dose * YAG_pixel_size**2  # X-rays/pixel at YAG
+    total_flux_on_YAG = total_flux_at_YAG
+else:
+    print('Your beam is larger than the YAG. Do you really think we should be wasting photons?')
+    dose_fraction = (YAG_radius / beam_radius_YAG) ** 2
+    YAG_dose = dose_fraction * total_flux_at_YAG / (np.pi * beam_radius_YAG) ** 2 % X-rays/unit area at YAG
+    YAG_pixel_dose = YAG_dose*YAG_pixel_size ** 2
+    total_flux_on_YAG = dose_fraction * total_flux_at_YAG
 
 
-% YAG absorption %
-YAG_absorption = 1 - YAG_transmission;
-% Total photon energy absorbed
-YAG_photons_emitted = YAG_absorption*total_flux_on_YAG*xray_photon_energy*YAG_fluorescence_emission; % eV/pixel
-% # of photons emitted by YAG
-sensor_excited_photons_total = YAG_photons_emitted*solid_angle_ratio; % photons/pixel
-% # counts per pixel
-sensor_counts_total = sensor_excited_photons_total*quantum_efficiency*(total_counts/well_depth); 
+# YAG absorption percentage
+YAG_absorption = 1 - YAG_transmission
+
+# 1. Total photon energy absorbed (in ev)
+YAG_energy_absorbed = YAG_absorption * total_flux_on_YAG * xray_photon_energy
+
+# 2. Number of optical photons emitted by YAG (Energy * Efficiency)
+# YAG_fluorescence_emission is in [photons / eV]
+YAG_Photons_emitted = YAG_energy_absorbed * YAG_fluoresence_emission # Units: photons / pixel
+
+# Number of photons reaching the sensor matrix
+sensor_excited_photons_total = YAG_photons_emitted * solid_angle_ratio # Units: photons / pixel
+
+# Number of digital counts per pixel on camera
+sensor_counts_total = sensor_excited_photons_total * quantum_efficiency * (total_counts / well_depth) 
 
 
-%% Start worrying about the sample. 
-% Pixel distances matrix at sample space
-sample_radial_distance_matrix = cmos_radial_distance_matrix /lens_magnification/xray_magnification;
-% Filter matrix to limit pixels to sample
-sample_filter = sample_radial_distance_matrix < sample_radius; 
-% Transmission due to sample attenuation
-sample_transmission = ones(size(sample_radial_distance_matrix)); % Make an transmission matrix at the sample location
+# Pixel distances matrix at sample space
+sample_radial_distance_matrix = cmos_radial_distance_matrix / lens_magnification / xray_magnification
+
+# Filter matrix to limit pixels to sample
+sample_filter = sample_radial_distance_matrix < sample_radius 
+
+# Transmission due to sample attenuation
+# Generates a Mateix of Ones with the exact same shape as your distance matrix
+sample_transmission = np.ones_like(sample_radial_distance_matrix) 
 
 
-if sample_type == "Tumor Contrast"
-    contrast_factor = 0.06; 
-else
-    contrast_factor = 1;
-end
+if sample_type == 'Tumor Contrast':
+    contrast_factor = 0.06 
+else:
+    contrast_factor = 1
 
 
-sample_transmission(sample_filter) = exp(-water_linear_attenuation_coeff*contrast_factor*sample_thickness); % Apply attenuation through sample
+sample_transmission(sample_filter) = exp(-water_linear_attenuation_coeff * contrast_factor*sample_thickness)  # Apply attenuation through sample
 
 
-%%  Displaying intensities
+#  Displaying intensities
 
 
-pixel_YAG_only_intensity = YAG_pixel_dose.* (YAG_filter & beam_filter); % X-ray/pixel intensity on YAG with no sample 
+pixel_YAG_only_intensity = YAG_pixel_dose. * (YAG_filter & beam_filter)  # X-ray/pixel intensity on YAG with no sample 
 
 
-mask = YAG_filter & beam_filter;
-number_of_pixels_excited = nnz(mask);
-sensor_intensities = zeros(size(mask));
+mask = YAG_filter & beam_filter
+number_of_pixels_excited = nnz(mask)
+sensor_intensities = zeros(size(mask))
 
 
-sensor_intensities(mask) = sensor_counts_total/number_of_pixels_excited; % X-ray/pixel intensity on YAG with no sample 
-sensor_intensities_with_sample = sensor_intensities.*sample_transmission;
+sensor_intensities(mask) = sensor_counts_total / number_of_pixels_excited  # X-ray / pixel intensity on YAG with no sample 
+sensor_intensities_with_sample = sensor_intensities. * sample_transmission
 
 
 # figure
