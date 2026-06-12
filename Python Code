@@ -1,5 +1,5 @@
 # def XPCI_propagation(sample_type, xray_photon_energy, YAG_diameter, YAG_fluorescence_emission, flux_IP_per_pulse, number_pulses, opening_angle, sample_diameter, sample_thickness, distance_IP_window, distance_window_sample, distance_sample_YAG, distance_YAG_lens):
-    return effective_pixel_size_horizontal, effective_pixel_size_vertical, FOV_horizontal ,FOV_vertical ,lens_magnification, beam_radius_YAG, beam_radius_sample, sensor_intensities, sensor_intensities_with_sample
+# return effective_pixel_size_horizontal, effective_pixel_size_vertical, FOV_horizontal ,FOV_vertical ,lens_magnification, beam_radius_YAG, beam_radius_sample, sensor_intensities, sensor_intensities_with_sample
 
 
 
