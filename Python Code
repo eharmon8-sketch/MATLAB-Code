@@ -269,27 +269,61 @@ else:
 
 sample_transmission[sample_filter] = np.exp(-water_linear_attenuation_coef * contrast_factor * sample_thickness) # Apply attenuation through sample
 
-# Displaying intensities
-
-pixel_YAG_only_intensity = YAG_pixel_dose * (YAG_filter & beam_filter) # X-ray/pixel intensity on YAG with no sample
+# Create detector intensity images
 
 mask = YAG_filter & beam_filter
 number_of_pixels_excited = np.count_nonzero(mask)
-sensor_intensities = np.zeros_like(mask, dtype = float)
+
+if number_of_pixels_excited==0:
+    raise ValueError('No illuminated pixels on the YAG screen.')
+
+sensor_intensities = np.zeros(mask.shape, dtype=float)
+
+# Uniform distribution of detected counts
+sensor_intensities[mask] = (
+    sensor_counts_total / number_of_pixels_excited
+)
+
+#Apply sample attenuation
+sensor_intensities_with_sample = (
+    sensor_intensities * sample_transmission
+)
 
 
-sensor_intensities[mask] = sensor_counts_total / number_of_pixels_excited # X-ray/pixel intensity on YAG with no sample
-sensor_intensities_with_sample = sensor_intensities * sample_transmission
+# Plot detector images
+fig, ax = plt.subplots(1, 2, figsize=(12, 5))
 
+im0 = ax[0].imshow(
+    sensor_intensities,
+    cmap='viridis',
+    origin='lower'
+)
 
-plt.figure()
-plt.imshow(sensor_intensities_with_sample)
-plt.axis('image')
-plt.colorbar()
+ax[0].set_title('Detector Counts (No Sample)')
+ax[0].set_xlabel('Pixel')
+ax[0].set_ylabel('Pixel')
+
+plt.colorbar(im0, ax=ax[0], label='Counts / Pixel')
+
+im1 = ax[1].imshow(
+    sensor_intensities_with_sample,
+    cmap='viridis',
+    origin='lower'
+)
+
+ax[1].set_title('Detector Counts (With Sample)')
+ax[1].set_xlabel('Pixel')
+ax[1].set_ylabel('Pixel')
+
+plt.colorbar(im1, ax=ax[1], label='Counts / Pixel')
+
+plt.tight_layout()
 plt.show()
-# plt.figure()
-# plt.imshow(sensor_intensities_with_sample)
-# plt.axis('image')
-# plt.colorbar()
-# plt.figure()
-# plt.imshow(mask, cmap='gray')
+
+# Helpful diagnostics
+print(f'Lens magnification: {lens_magnification:.3f}')
+print(f'Xray magnification: {xray_magnification:.3f}')
+print(f'Beam radius at YAG: {beam_radius_YAG*1e3:.2f} mm')
+print('Pixels illuminated: {number_of_pixels_excited}')
+print(f'Total counts reaching detector: {sensor_counts_total:.2f}')
+print(f'Peak pixel counts: {sensor_intensities_with_sample.max():.2f}')
