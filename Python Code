@@ -350,6 +350,20 @@ n_matrix[:, :mid_col] = n_1
 n_matrix[:, :mid_col:] = n_2
 
 # Wavefront Interaction with Matter
+# Utilizes 'sample_thickness' as 1e-5 m
+PSI_incident = np.ones((n_row, n_col))
+PSI_disturbed = np.exp(-1j * k_mag * sample_thickness *n_matrix) * PSI_incident
+
+
+# Extract Measured Intensity Image Just After Sample Exit
+intensity_after_sample = np.abs(PSI_disturbed) ** 2
+
+plt.figure()
+im = plt.imshow(intensity_after_sample, aspect='auto', cmap='gray_r', vmin=0, vmax=2)
+plt.colorbar(im)
+plt.title('Intensity Image Immediately After Exiting A/W Sample')
+
+
 
 
 
