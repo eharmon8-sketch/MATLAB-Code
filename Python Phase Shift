@@ -1,0 +1,96 @@
+# Implementing the equations from Paganin's textbook for simple phase contrast imaging 
+import math import pi
+import os
+import matplotlib.pyplot as plt
+import numpy as np
+
+# 1. Environment Setup
+# Equivalent to CLC
+os.system('cls' if os.name == 'nt' else 'clear')
+
+# Equivalent to Close all 
+plt.close('all')
+
+
+# 2. Constants and Physics Parameters
+# For a wavelength of approximately 0.3 micrometers
+wavelength = 0.3e-6 # m
+
+# k is the wave vector 
+k = (2 * pi * 3e8) / wavelength
+
+# Complex Refractive Indices (canged 'i' to '1j')
+n_1 = 1  # Complex Refractive Index of air
+n_2 = 1.369839 - (3.826e-09 * 1j)  # Complex Refractive Index of water
+
+# Set each intial component of k, the wave vector
+kx = 0
+ky = 0
+kz = k
+
+
+# 3. Matrix Initializations
+# Start with a scalar field that is the constant PSI = 1 everywhere
+PSI_1 = np.ones((20,200)
+PSI_2 = np.ones((20,200)
+
+
+# 4. X-ray Interaction with Matter
+# For a sample z1 = 0.1 m thickness
+z1 = 0.1 # m
+PSI_disturbed_1 = np.exp(-1j * k * z1 * n_1) * PSI_1
+PSI_disturbed_2 = np.exp(-1j * k * z1 * n_2) * PSI_2
+
+
+# 5. Image Just After Leaving Sample
+# Calculate intensities using the square of the absolute value
+I1 = np.abs(PSI_disturbed_1) ** 2
+I2 = np.abs(PSI_disturbed_2) ** 2
+
+# Horizontally stack the two 20 x 200 matrices into a single 20 x 400 matrix
+PSI_disturbed = np.hstack((I1, I2))
+
+plt.figure()
+
+im=plt.imshow(PSI_disturbed, aspect='auto', cmap='gray_r', vmin=0, vmax=2)
+
+plt.colorbar(im)
+
+plt.title(
+  'Intensity Image of Scalar Field Immediately After Exiting A/W Sample'
+)
+
+
+# 6. First FFT and Plot 
+p_a = np.fft.fft2(PSI_disturbed)
+
+plt.figure()
+plt.imshow(np.abs(p_a) ** 2, aspect='auto', cmap='gray_r')
+plt.colorbar()
+plt.title('FFT of Matrix After Sample')
+
+
+# 7. Propagator Multiplication and Plot
+P = np.ones((20, 400))
+
+p_b = p_a * P # Element-wise multiplication
+
+plt.figure()
+plt.imshow(np.abs(p_b) ** 2, aspect='auto', cmap='gray_r')
+plt.colorbar()
+plt.title('FFT x Free Space Propagator')
+
+
+# 8. Inverse FFT and Final Image Plot
+p_c = np.fft.ifft2(p_b)
+
+# Image after propagating
+final = np.abs(p_c) ** 2
+
+plt.figure()
+plt.imshow(final, aspect='auto', cmap='gray_r')
+plt.colorbar()
+plt.title('Intensity Image of Scalar Field After Propagating 0.5 m')
+
+# Display all figures to the screen simultaneously
+plt.show()
