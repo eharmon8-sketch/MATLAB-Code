@@ -328,18 +328,18 @@ print('Pixels illuminated: {number_of_pixels_excited}')
 print(f'Total counts reaching detector: {sensor_counts_total:.2f}')
 print(f'Peak pixel counts: {sensor_intensities_with_sample.max():.2f}')
 
-# Calculating the wavelength (lambda) based on the X-ray energy 9300 eV
+# Calculating the wavelength (lambda) based on the X-ray energy (9300 eV)
 # E = h * c / lambda where lambda = h * c / E
 # 1 eV = 1.602176634e-19 Joules 
 energy_joules = xray_photon_energy * 1.602176634e-19
 wavelength_calculated = (h * c) / energy_joules
 
 
-# Calculating the wave vector magnitude (k)
+# Calculating the wave vector (k) magnitude
 k_mag = (2 * np.pi) / wavelength_calculated 
 
 # Create a unified Complex Refractive Index map matching the detector grid
-# Generates a complex-val;ued matrix sized to camera: n_row (2464) x n_col (2056)
+# Generates a complex-valued matrix sized to camera: n_row (2464) x n_col (2056)
 n_matrix = np.ones((n_row, n_col), dtype=complex)
 mid_col = n_col // 2
 
@@ -364,7 +364,23 @@ plt.colorbar(im)
 plt.title('Intensity Image Immediately After Exiting A/W Sample')
 
 
+# 2D FFT to Angular Spectrum Domain
+p_a = np.fft.fft2(PSI_disturbed)
+
+plt.figure()
+plt.imshow(np.abs(p_a) ** 2, aspect='auto', cmap='gray_r')
+plt.colorbar()
+plt.title('FFT x Free Space Propagator')
 
 
+# Inverse FFT to get Wavefront Intensity at the YAG Screen 
+p_c = np.fft.ifft2(p_b)
+final_propagated_intensity = np.abs(p_c) ** 2
 
+plt.figure()
+plt.imshow(final_propagated_intensity, aspect='auto', cmap='gray_r')
+plt.colorbar()
+plt.title('Intensity Image of Scalar Field After Propagating 0.5 m')
 
+# Display all new phase-contrast figures to the screen
+plt.show()
