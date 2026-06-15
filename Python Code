@@ -344,9 +344,11 @@ n_matrix = np.ones((n_row, n_col), dtype=complex)
 mid_col = n_col // 2
 
 # Left half = Air (Refractive Index = 1.0)
+n_1 = 1.0
 n_matrix[:, :mid_col] = n_1
 
 # Right half = Water (Complex Refractive Index)
+n_2 = 
 n_matrix[:, :mid_col:] = n_2
 
 # Wavefront Interaction with Matter
