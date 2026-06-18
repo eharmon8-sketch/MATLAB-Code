@@ -1,0 +1,52 @@
+%% Implementing the Equations from Pagnin's Textbook for Simple PCI
+Close all; Clear; CLC;
+%% Sample Matrix
+% The sample is a 400 X 20 matrix where the left half of the matrix is made
+% of water and the right half of the matrix is made of calcium.
+% for a wavelength of ~0.3 UM
+lambda = 0.3E-6; % M
+K = (2*PI)/lambda;
+% N_1 = 1.369839 - I*(3.826E-09); % complex refractive index of water
+% N_2 = 0.67852 - I*0.86244; % complex refractive index of calcium
+N_1 = 1; % complex refractive index of air
+N_2 = 1.369839 - I*(3.826E-09); % complex refractive index of water
+% Set each initial component of the K vector
+KX = 0;
+KY = 0;
+KZ = K;
+% Start with a scalar field that is the constant PSI = 1 everywhere
+PSI_1 = ones(20,200);
+PSI_2 = ones(20,200);
+%% X-Ray interaction with matter
+% For a sample z1 = 0.1 M thick
+z1 = 0.1;
+PSI_disturbed_1 = exp(-I*K*z1*N_1)*PSI_1;
+PSI_disturbed_2 = exp(-I*K*z1*N_2)*PSI_2;
+% Image just after leaving the sample
+I1 = (Abs(PSI_disturbed_1)).^2;
+I2 = (ABS(PSI_disturbed_2)).^2;
+PSI_disturbed = [I1 I2];
+Figure;
+ImagesC(PSI_disturbed);
+Colorbar; Colormap(Flipud(gray)); Caxis([0 2]);
+Title('Intensity image of scalar field immediately after exisiting A/W sample')
+
+% The Free Space Propagator
+P = exp(I*Z2*SQRT(K.^2 - KX.^2 - KY.^2));
+
+% Using the propagator
+P_A = FFT(PSI_disturbed);
+Figure; ImagesC((abs(P_A)).^2)
+Colorbar; Colormap(Flipud(gray));
+title('FFT of Matrix After Sample')
+P_B = P_A*P;
+Figure; ImagesC((abs(P_B)).^2)
+Colorbar; Colormap(Flipud(gray));
+Title('FFT x Free Space Propagator')
+P_C = IFFT2(P_B);
+% Image After Propagating
+Final = (ABS(P_C)).^2;
+Figure;
+ImagesC(Final);
+Colorbar; Colormap(Flipud(gray));
+Title('Intensity Image of Scalar Field after Propagating 0.5 m')
