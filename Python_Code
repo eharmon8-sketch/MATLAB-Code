@@ -336,84 +336,53 @@ wavelength_calculated = (h * c) / energy_joules
 
 
 # Calculating the wave vector (k) magnitude
-k = (2 * np.pi) / wavelength_calculated
+k_mag = (2 * np.pi) / wavelength_calculated
 
-n_air = 1.0
-n_water = 1.369839 - (3.826e-09 * 1j)
-n_calcium = 0.67852 - (0.86244 * 1j)
-
-
-# Create sample with air and water
+# Create a unified Complex Refractive Index map matching the detector grid
+# Generates a complex-valued matrix sized to camera: n_row (2464) x n_col (2056)
 n_matrix = np.ones((n_row, n_col), dtype=complex)
 mid_col = n_col // 2
 
 # Left half = Air (Refractive Index = 1.0)
-n_matrix[:, :mid_col] = n_air
+n_1 = 1.0
+n_matrix[:, :mid_col] = n_1
 
 # Right half = Water (Complex Refractive Index)
-n_matrix[:, :mid_col:] = n_water
+n_2 = 1.369839 - (3.826e-09 * 1j)
+n_matrix[:, :mid_col:] = n_2
 
-# Incident Wave
-PSI_incident = np.ones((n_row, n_col), dtype=complex)
+# Wavefront Interaction with Matter
+# Utilizes 'sample_thickness' as 1e-5 m
+PSI_incident = np.ones((n_row, n_col))
+PSI_disturbed = np.exp(-1j * k_mag * sample_thickness *n_matrix) * PSI_incident
 
-
-# X-ray interaction with sample
-PSI_disturbed = (
-                        np.exp(-1j * k * sample_thickness * n_matrix)
-                        * PSI_incident
-)
 
 # Extract Measured Intensity Image Just After Sample Exit
 intensity_after_sample = np.abs(PSI_disturbed) ** 2
 
 plt.figure()
-plt.imshow(intensity_after_sample,
-                aspect='auto',
-                cmap='gray_r',
-                vmin=0,
-                vmax=2
-)
-plt.colorbar()
-plt.title('Intensity Image Immediately After Exiting Air/Water Sample')
+im = plt.imshow(intensity_after_sample, aspect='auto', cmap='gray_r', vmin=0, vmax=2)
+plt.colorbar(im)
+plt.title('Intensity Image Immediately After Exiting A/W Sample')
 
 
-# Free-space propagator
-z2 = 0.5 # meters
-
-KX = 0
-KY = 0
-
-P = np.exp(
-    1j * z2 * np.sqrt(k**2 - KX**2 - KY**2)
-)
-
-
-# Fast Fourier Transform
-P_A = np.fft.fft2(intensity_after_sample)
+# 2D FFT to Angular Spectrum Domain
+p_a = np.fft.fft2(PSI_disturbed)
 
 plt.figure()
-plt.imshow(np.abs(P_A)**2, cmap='gray_r', aspect='auto', )
-plt.colorbar()
-plt.title('FFT of Matrix After Sample')
-
-
-# Multiply by propagator
-P_B = P_A * P
-
-plt.figure()
-plt.imshow(np.abs(P_B)**2, cmap='gray_r', aspect='auto')
+plt.imshow(np.abs(p_a) ** 2, aspect='auto', cmap='gray_r')
 plt.colorbar()
 plt.title('FFT x Free Space Propagator')
 
 
-# Inverse Fast Fourier Transform
-P_C = np.fft.ifft2(P_B)
-
-final_propagated_intensity = np.abs(P_C)**2
+# Inverse FFT to get Wavefront Intensity at the YAG Screen
+p_c = np.fft.ifft2(p_a)
+final_propagated_intensity = np.abs(p_c) ** 2
 
 plt.figure()
-plt.imshow(final_propagated_intensity, cmap='gray_r', aspect='auto')
+plt.imshow(final_propagated_intensity, aspect='auto', cmap='gray_r')
 plt.colorbar()
 plt.title('Intensity Image of Scalar Field After Propagating 0.5 m')
 
+# Display all new phase-contrast figures to the screen
 plt.show()
