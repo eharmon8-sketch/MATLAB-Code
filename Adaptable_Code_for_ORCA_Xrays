@@ -1,0 +1,225 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import sys
+# def XPCI_propagation(sample_type, xray_photon_energy, YAG_diameter, YAG_fluorescence_emission, flux_IP_per_pulse, number_pulses, opening_angle, sample_diameter, sample_thickness, distance_IP_window, distance_window_sample, distance_sample_YAG, distance_YAG_lens):
+# return effective_pixel_size_horizontal, effective_pixel_size_vertical, FOV_horizontal ,FOV_vertical ,lens_magnification, beam_radius_YAG, beam_radius_sample, sensor_intensities, sensor_intensities_with_sample
+
+
+# samD = 0.005  # m
+# distYAGtoCam = 0.5  # m
+# energy = 9190  # eV
+# fluxip = 5000000  # x-rays
+# airTsam = 0.8807
+# airTYAG = 0.8293
+# pathSam = 0.17  # m
+# pathYAG = 0.25  # m
+# waterT = 0.9934
+# openingAngle = 10e-3  # rad
+# YAGT = 0.1138
+
+
+# Camera and optical information for a MAKO G-507C camera with a SONY IMX264 sensor
+# Using a 2/3" rated C-mount lens with f / 1.4
+f_number = 1.4
+flange_focal_distance = 0.017526 # m
+lens_focal_distance = 0.05 # m
+
+pixel_size = 3.45e-6 # m
+pixel_area = pixel_size ** 2 # area of one pixel, m ** 2
+detector_horizontal = 2464 # horizontal pixels
+detector_vertical = 2056 # vertical pixels
+well_depth = 10600 # per pixel
+quantum_efficiency = 0.64
+number_bits = 12
+total_counts = 2 ** number_bits
+total_pixels = detector_vertical * detector_horizontal # = pHorizontal * pVertical; number of pixels
+detector_area = pixel_area * total_pixels # actual area of sensor
+
+
+# Geometry and distances
+distance_IP_window = 4.8 # m
+distance_window_sample = 0.17 # m
+distance_sample_YAG = 0.25 # m (Propagation distance z)
+distance_YAG_lens = 0.164 # m
+YAG_diameter = 0.02 # m
+YAG_radius = YAG_diameter / 2 # m, radius of YAG
+YAG_fluorescence_emission = 30 # number of green photons emitted per incident eV of X-rays
+opening_angle = 0.010 # 10 m, radians
+flux_IP_per_pulse = 1e5
+number_pulses = 1
+
+
+# Physical constants and wave specifications to 9.3 keV
+xray_photon_energy = 9300 # eV
+window_transmission = 0.902 # 100um diamond window
+air_linear_attenuation_coef = 1.08 # 1 / m
+water_linear_attenuation_coef = 480 # 1 / m
+YAG_transmission = 0.341 # 50 um YAG
+
+
+# xray_energy_keys = [9300, 12000, 15000, 18000, 20000, 23000]
+# attenuation_coefficients = [
+#   [0.902, 12, 18, 0.341],
+#   [0.95, 1.8, 16, 0.587],
+#   [0.972, 1.5, 15, 0.750],
+#   [0.0981, 1.2, 14, 0.388],
+#   [0.985, 1.1, 14, 0.484],
+#    [0.987, 1.0, 13, 0.607]
+# ]
+# transmission_matrix = dict(zip(xray_energy_keys, attenuation_coefficients))
+
+
+# if 'xray_photon_energy' not in locals ():
+#   sys.exit('Error: xray_photon_energy is not defined.')
+
+# if 'xray_photon_energy' not in transmission_matrix:
+#   sys.exit(f'Error: No entry for photon energy {xray_photon_energy} in the lookup table.')
+
+
+# selection = transmission_matrix[xray_photon_energy]
+# window_transmission = selection[1]
+# air_linear_attenuation_coeff = selection[2]
+# water_linear_attenuation_coeff = selection[3]
+# YAG_transmission = selection[4]
+
+
+# Sample Parameters
+sample_diameter = 0.005  # m
+sample_radius = sample_diameter / 2  # m
+sample_thickness = 1e-5
+
+# General variables
+h = 6.626070041e-34  # m ** 2 in kg / s
+c = 3e8  # m / s
+# range of lambda for YAG = 530 - 550 nm
+# range of lambda for YAG = 530 - 550 nm
+# solidAngleRatio = 0.0123 / (4 * pi)  # solid angle ratio due to f-number 4
+# f-number (N) = focal length (f) / entrance pupil diameter (D)
+# tan(theta) = 0.5 * (D / f)
+# for small theta, theta is approximately tan(theta)
+# theta is approx. 0.5 * N
+# solid_angle = 2 * pi * (1 - cos(theta))
+# cos(theta) is approx. 1 - (theta ** 2) / 2
+# solid_angle = pi * (theta ** 2)
+# Given theta is approx. 1 / (2 * N), this simplifies to: pi / (4 * N ** 2)
+# solid_angle_ratio = solid_angle / (4 * pi) = 1 / (16 * N ** 2)
+hc = 1.23984193e-6 # eV * m
+solid_angle_ratio = (1 / 16) * (f_number ** -2)
+wavelength = hc / xray_photon_energy # m
+k = (2 * np.pi) / wavelength # Wave number
+
+# Complex refractive indices (n = 1 - delta + i*beta)
+# Left half material (air-like)
+delta1, beta1 = 8e-8, 2e-11
+# Right half material (water-like)
+delta2, beta2 = 3.5e-6, 1.7e-8
+
+# Pixel calculations with Field of View (FOV)
+# dist = (FOV + 18.913) / 0.091 # mm
+# Horizontal field of view (FOV_horizontal)
+# FOV_horizontal = distYAGtoCam * 0.091 - 0.018913  # m
+# FOV = FOV_horizontal / 1.2  # m
+
+
+# FOV = sensor_size / magnification (M)
+# M = image_size / object_size = (dist_source_sample + dist_sample_detector) / dist_source_sample
+
+
+# Optical geometry scaling
+lens_magnification = lens_focal_distance / (distance_YAG_lens - lens_focal_distance)
+if lens_magnification < 0:
+    sys.exit('Error: The focal length of the lens is larger than the distance of your YAG.')
+
+# Field of View (FOV) calculation
+FOV_horizontal = (pixel_size * detector_horizontal) / lens_magnification
+FOV_vertical = (pixel_size * detector_vertical) / lens_magnification
+
+# Effective pixel size calculation
+effective_pixel_size_horizontal = FOV_horizontal / detector_horizontal
+effective_pixel_size_vertical = FOV_vertical / detector_vertical
+
+xray_magnification = (distance_IP_window + distance_window_sample + distance_sample_YAG) / (distance_IP_window + distance_window_sample)
+
+
+# Coordinate grid generation
+x_vector = (np.arange(detector_horizontal) - detector_horizontal / 2 + 0.5) * pixel_size / lens_magnification
+y_vector = (detector_vertical / 2 - 0.5 - np.arange(detector_vertical)) * pixel_size / lens_magnification
+x_matrix, y_matrix = np.meshgrid(x_vector, y_vector)
+radial_distance_matrix = np.sqrt(x_matrix**2 + y_matrix**2)
+
+
+# Geometry filters
+YAG_filter = radial_distance_matrix < YAG_radius
+sample_filter = (radial_distance_matrix / xray_magnification) < sample_radius
+
+
+# Split YAG detector / material specifications
+# Split the coordinate space down the middle (left and right)
+left_half = x_matrix < 0
+right_half = ~left_half
+
+# Initialize maps for delta and beta across the sample domain
+delta_map = np.zeros_like(x_matrix)
+beta_map = np.zeros_like(x_matrix)
+
+# Properties where sample exists based on split location
+delta_map[sample_filter & left_half] = delta1
+beta_map[sample_filter & left_half] = beta1
+delta_map[sample_filter & right_half] = delta2
+beta_map[sample_filter & right_half] = beta2
+
+
+# Wave propagation with the angular spectrum method
+# 1. Complex field exiting sample plane
+amplitude_attenuation = np.exp(-k * beta_map * sample_thickness)
+phase_shift = np.exp(-1j * k * delta_map * sample_thickness)
+U_exit = amplitude_attenuation * phase_shift
+
+# 2. Fourier propagation setup
+dx = pixel_size / lens_magnification
+dy = dx
+fx = np.fft.fftfreq(detector_horizontal, d=dx)
+fy = np.fft.fftfreq(detector_vertical, d=dy)
+FX, FY = np.meshgrid(fx, fy)
+
+# Free space transfer function
+z = distance_sample_YAG
+H = np.exp(-1j * np.pi * wavelength * z * (FX**2 + FY**2))
+
+# 3. Propagate to YAG screen
+U_fft = np.fft.fft2(U_exit)
+U_propagated = np.fft.ifft2(U_fft * H)
+intensity_YAG = np.abs(U_propagated)**2
+
+# Scale intensities to match detector counting mechanisms
+sensor_counts = intensity_YAG * YAG_filter * (total_counts * 0.7)
+
+
+# Visualization and line profile analysis
+fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+
+# Subplot 1: Simulated phase contrast split-screen image
+im0 = ax[0].imshow(sensor_counts, cmap='viridis', extent=[x_vector[0]*1e3, x_vector[-1]*1e3, y_vector[-1]*1e3, y_vector[0]*1e3])
+ax[0].set_title('2D Detector Counts\n(Left Material vs Right Material Phase Shift)')
+ax[0].set_xlabel('Horizontal Position (mm)')
+ax[0].set_ylabel('Vertical Position (mm)')
+plt.colorbar(im0, ax=ax[0], label='Counts / Pixel')
+
+# Subplot 2: Horizontal line profile (statistical analysis)
+mid_row = detector_vertical // 2
+line_profile = sensor_counts[mid_row, :]
+ax[1].plot(x_vector * 1e3, line_profile, color='firebrick', lw=2, label='Horizontal Cut')
+ax[1].axvline(0, color='black', linestyle='--', alpha=0.5, label='Material Split Boundary')
+ax[1].set_title(f'Line Profile Analysis at Center Row ({mid_row})')
+ax[1].set_xlabel('Horizontal Position (mm)')
+ax[1].set_ylabel('Intensity (Counts)')
+ax[1].legend()
+
+# Simple Descriptive Statistics
+print('Line Profile Statistics')
+print(f'Left Side Max Counts (Material 1): {np.max(line_profile[x_vector < 0]):.2f}')
+print(f'Right Side Max Counts (Material 2): {np.max(line_profile[x_vector > 0]):.2f}')
+print(f'Global Intensity Variance: {np.var(line_profile):.2f}')
+
+plt.tight_layout()
+plt.show()
