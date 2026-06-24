@@ -1,7 +1,10 @@
 import numpy as np
+from PIL import Image
 import matplotlib.pyplot as plt
 import sys
 import tifffile
+import math
+import matplotlib.patches as patches
 # def XPCI_propagation(sample_type, xray_photon_energy, YAG_diameter, YAG_fluorescence_emission, flux_IP_per_pulse, number_pulses, opening_angle, sample_diameter, sample_thickness, distance_IP_window, distance_window_sample, distance_sample_YAG, distance_YAG_lens):
 # return effective_pixel_size_horizontal, effective_pixel_size_vertical, FOV_horizontal ,FOV_vertical ,lens_magnification, beam_radius_YAG, beam_radius_sample, sensor_intensities, sensor_intensities_with_sample
 
@@ -21,17 +24,16 @@ import tifffile
 
 # Camera and optical information for an ORCA-Flash4.0 LT3 Digital CMOS camera
 # Using a MAP 1030100 lens
-f_number_lens1 = 0.030 / 0.035 # m
-f_number_lens2 = 0.100 / 0.035 # m
+f_number = 0.045 # m
 flange_focal_distance = 0.017526 # m
-lens_focal_distance = 0.05 # m
+lens_focal_distance = 0.045 # m
 
 pixel_size = 6.5e-6 # m.
 pixel_area = pixel_size ** 2 # area of one pixel, m ** 2
 detector_horizontal = 2048 # horizontal pixels
 detector_vertical = 2048 # vertical pixels
 well_depth = 30000 # per pixel
-quantum_efficiency = 0.82 # achieved at a wavelength of 560 nm
+quantum_efficiency = 0.82 # achieved at a wavelength of 560 nm (visible green light)
 number_bits = 16
 total_counts = 2 ** number_bits
 total_pixels = detector_vertical * detector_horizontal # = pHorizontal * pVertical; number of pixels
@@ -93,6 +95,7 @@ sample_thickness = 1e-5
 # General variables
 h = 6.626070041e-34  # m ** 2 in kg / s
 c = 3e8  # m / s
+hc = 1.23984193e-6 # eV * m
 # range of lambda for YAG = 530 - 550 nm
 # range of lambda for YAG = 530 - 550 nm
 # solidAngleRatio = 0.0123 / (4 * pi)  # solid angle ratio due to f-number 4
@@ -105,9 +108,7 @@ c = 3e8  # m / s
 # solid_angle = pi * (theta ** 2)
 # Given theta is approx. 1 / (2 * N), this simplifies to: pi / (4 * N ** 2)
 # solid_angle_ratio = solid_angle / (4 * pi) = 1 / (16 * N ** 2)
-hc = 1.23984193e-6 # eV * m
-solid_angle_ratio_lens1 = (1 / 16) * (f_number_lens1 ** -2)
-solid_angle_ratio_lens2 = (1 / 16) * (f_number_lens2 ** -2)
+solid_angle_ratio = (1 / 16) * (f_number ** -2)
 wavelength = hc / xray_photon_energy # m
 k = (2 * np.pi) / wavelength # Wave number
 
@@ -229,31 +230,128 @@ plt.tight_layout()
 plt.show()
 
 
-
-
 N = 10
-img_stack = np.zeros((2048,2048,N))
+img_stack = np.zeros((2048, 2048, N), dtype='float32')
+
 for i in range(N):
-    fname = f"Xray_images/Image{i+1}.tif"
+    fname = f'Xray_images/Image{i+1}.tif'
     print(fname)
-    # yay
     img = tifffile.imread(fname)
     img_stack[:,:,i] = img
 
-print(img_stack.shape)
-plt.figure(figsize=(8, 8))
-plt.imshow(img_stack[:,:,4], cmap="gray")  # use cmap for grayscale images
-plt.imshow(img_stack[:,:,0], cmap="gray")
-plt.axis("off")
+print('Stack Shape:', img_stack.shape)
+image9 = img_stack[:, :, 8]
+image10 = (img_stack[:, :, 9]) * 0.72
+diff = image9 - image10
+fig, ax = plt.subplots(figsize=(10, 8))
+# Positive difference (Image 9 was brighter) and displays as red
+# Negative difference (Image 10 was brighter) and displays as blue
+cax = ax.imshow(diff, cmap='bwr')
+cbar = fig.colorbar(cax, ax=ax)
+cbar.set_label('Intensity of Visible Light Emitted')
+ax.set_title('Difference Plot Between Image 9 and Image 10')
+ax.axis('off')
 plt.show()
 
-dark = img_stack[:,:,0]/np.sum(img_stack[:,:,0])
-signal = img_stack[:,:,6] / np.sum(img_stack[:,:,6])
-
-hello = signal - dark
-plt.figure(figsize=(8, 8))
-plt.imshow(hello, cmap="gray")  # use cmap for grayscale images
+plt.figure(figsize=(10, 8))
+plt.imshow(img_stack[:,:,9], cmap="gray")
 plt.colorbar()
-# plt.imshow(img_stack[:,:,0], cmap="gray")
-plt.axis("off")
+plt.axis('off')
+plt.show()
+
+def calculate_transmission(I0, attenuation_length, thickness):
+    """
+    Calculates the transmitted intensity with the following parameters:
+
+    I0 (float): Initial intensity (eV)
+    attenuation_length (float): Lambda value (microns)
+    thickness (float): Thickness of the material 'x' (microns)
+
+    Returns:
+    float: Transmitted intensity (eV)
+    """
+    # a = 1 / lambda
+    alpha = 1.0 / attenuation_length
+
+    # I = I0 * e^-(a*x)
+    transmitted_intensity = I0 * math.exp(-alpha * thickness)
+
+    return transmitted_intensity
+
+# Default Parameters
+I0_value = 8104.32 # eV
+
+# Aluminum properties
+al_lambda = 80.6286 # microns
+al_thickness = 16 # microns
+
+# Kapton properties
+kapton_lambda = 1226.78 # microns
+kapton_thickness = 50.0 # microns
+
+al_transmission = calculate_transmission(I0_value, al_lambda, al_thickness)
+kapton_transmission = calculate_transmission(I0_value, kapton_lambda, kapton_thickness)
+
+print('Transmission Results')
+print(f'Aluminum Transmitted Intensity: {al_transmission:.4f} eV')
+print(f'Kapton Transmitted Intensity: {kapton_transmission:.4f} eV')
+
+image9 = img_stack[:, :, 8] # Al/Kapton object image
+image10 = (img_stack[:, :, 9]) * 0.8 # No object image
+
+x_left_start, x_left_end = 1270, 1350
+x_mid_start, x_mid_end = 1420, 1480
+x_right_start, x_right_end = 1590, 1760
+
+y_start, y_end = 450, 600 # Shared vertical bounds across diamond width
+
+# Intensity data from Al/Kapton object image (Image9.tif)
+roi1_img9 = image9[y_start:y_end, x_left_start:x_left_end] # Aluminum
+roi2_img9 = image9[y_start:y_end, x_mid_start: x_mid_end] # Overlap
+roi3_img9 = image9[y_start:y_end, x_right_start: x_right_end] # Kapton
+
+# Extract intensity data from no object image (Image10.tif)
+roi1_img10 = image10[y_start:y_end, x_left_start:x_left_end]
+roi2_img10 = image10[y_start:y_end, x_mid_start: x_mid_end]
+roi3_img10 = image10[y_start:y_end, x_right_start: x_right_end]
+
+# Calculate Mean Intensities
+mean_roi1_9, mean_roi1_10 = np.mean(roi1_img9), np.mean(roi1_img10)
+mean_roi2_9, mean_roi2_10 = np.mean(roi2_img9), np.mean(roi2_img10)
+mean_roi3_9, mean_roi3_10 = np.mean(roi3_img9), np.mean(roi3_img10)
+
+# Calculate experimental transmission
+trans_al = mean_roi1_9 / mean_roi1_10
+trans_overlap = mean_roi2_9 / mean_roi2_10
+trans_kapton = mean_roi3_9 / mean_roi3_10
+
+print('Experimental Transmission Analysis')
+print(f'Aluminum Region (ROI 1): I = {mean_roi1_9:.2f}, I0 = {mean_roi1_10:.2f} -> Transmission = {trans_al:.4f}')
+print(f'Overlap Region (ROI 2): I = {mean_roi2_9:.2f}, I0 = {mean_roi2_10:.2f} -> Overlap = {trans_overlap:.4f}')
+print(f'Kapton Region (ROI 3): I = {mean_roi3_9:.2f}, I0 = {mean_roi3_10:.2f} -> Transmission = {trans_kapton:.4f}')
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7))
+vmin, vmax = np.percentile(image9, 1), np.percentile(image9, 99.9)
+ax1.imshow(image9, cmap='gray', vmin=vmin, vmax=vmax)
+ax1.set_title('Image with Aluminum and Kapton Sample')
+
+ax2.imshow(image10, cmap='gray', vmin=vmin, vmax=vmax)
+ax2.set_title('Image Without Sample')
+
+def draw_regions(ax):
+    colors = ['cyan', 'yellow', 'magenta']
+    regions = [
+        (x_left_start, x_left_end, 'ROI 1: Aluminum'),
+        (x_mid_start, x_mid_end, 'ROI 2: Overlap'),
+        (x_right_start, x_right_end, 'ROI 3: Kapton'),
+    ]
+    for col, (x1, x2, label) in zip(colors, regions):
+        rect = patches.Rectangle((x1, y_start), x2 - x1, y_end - y_start,
+                                 linewidth=1.5, edgecolor=col, facecolor='none')
+        ax.add_patch(rect)
+
+draw_regions(ax1)
+draw_regions(ax2)
+
+plt.tight_layout()
 plt.show()
