@@ -5,6 +5,7 @@ import sys
 import tifffile
 import math
 import matplotlib.patches as patches
+
 # def XPCI_propagation(sample_type, xray_photon_energy, YAG_diameter, YAG_fluorescence_emission, flux_IP_per_pulse, number_pulses, opening_angle, sample_diameter, sample_thickness, distance_IP_window, distance_window_sample, distance_sample_YAG, distance_YAG_lens):
 # return effective_pixel_size_horizontal, effective_pixel_size_vertical, FOV_horizontal ,FOV_vertical ,lens_magnification, beam_radius_YAG, beam_radius_sample, sensor_intensities, sensor_intensities_with_sample
 
@@ -254,7 +255,7 @@ ax.axis('off')
 plt.show()
 
 plt.figure(figsize=(10, 8))
-plt.imshow(img_stack[:,:,9], cmap="gray")
+plt.imshow(img_stack[:,:,8], cmap="gray")
 plt.colorbar()
 plt.axis('off')
 plt.show()
@@ -352,6 +353,90 @@ def draw_regions(ax):
 
 draw_regions(ax1)
 draw_regions(ax2)
+
+plt.tight_layout()
+plt.show()
+
+print('Running Fresnel Propagation and Phase Analysis')
+
+# Defining the horizontal boundaries
+ribbon_y_start = 450
+ribbon_y_end = 600
+
+# Extract one-dimensional horizontal ribbon bounds
+sample_strip = image9[ribbon_y_start:ribbon_y_end,:]
+flat_strip = image10[ribbon_y_start:ribbon_y_end,:]
+
+experimental_profile = np.mean(sample_strip, axis=0)
+flat_field_profile = np.mean(flat_strip, axis=0)
+
+# Normalize experimental profile to obtain pure transmission intensity (I/I0)
+normalized_intensity = experimental_profile / (flat_field_profile + 1e-6)
+
+# Constructing the phase shift map across three regions
+phase_map = np.zeros_like(normalized_intensity)
+delta_Al = 1.3e-5
+delta_Kapton = 3.2e-6
+delta_Overlap = delta_Al / delta_Kapton
+
+phase_map[x_left_start:x_left_end] = (2 * np.pi / wavelength) * delta_Al * (al_thickness * 1e-6)
+phase_map[x_mid_start:x_mid_end] = (2 * np.pi / wavelength) * delta_Overlap * ((al_thickness + kapton_thickness) * 1e-6)
+phase_map[x_right_start:x_right_end] = (2 * np.pi / wavelength)* delta_Kapton * (kapton_thickness * 1e-6)
+
+# Exit wavefront using the amplitude and phase from regions of interest
+amplitude_exit = np.sqrt(np.clip(normalized_intensity, 0, 1))
+U_exit_1D = amplitude_exit * np.exp(1j * phase_map)
+
+# Applying the angular spectrum method
+number_pixels_x = detector_horizontal
+dx_eff = pixel_size / lens_magnification # Effective pixel size
+fx_1D = np.fft.fftfreq(number_pixels_x, d=dx_eff)
+
+# Propagation distance z is based on air timing and geometry settings
+z_propagation = distance_sample_YAG
+
+# Free space transfer function in one dimension
+H_1D = np.exp(-1j * np.pi * wavelength * z_propagation * (fx_1D**2))
+
+# Forward fourier transform
+U_fft_1D = np.fft.fft(U_exit_1D)
+
+# Using transfer function and inverse FFT
+U_propagated_1D = np.fft.ifft(U_fft_1D * H_1D)
+intensity_propagated_1D = np.abs(U_propagated_1D)**2
+
+# Calculate propagation time / air travel time over a distance z
+propagation_time_ns = (z_propagation / c) * 1e9
+print(f'X-ray propagation distance: {z_propagation:.4f}m')
+print(f'Calculated time to detector: {propagation_time_ns:.4f}ns')
+
+fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
+
+# Extracted raw data
+axes[0].plot(normalized_intensity, color='black', label='Normalized Transmission ($I/I_0$)')
+axes[0].axvspan(x_left_start, x_left_end, color='cyan', alpha=0.2, label='Region of Interest 1: Aluminum')
+axes[0].axvspan(x_mid_start, x_mid_end, color='yellow', alpha=0.2, label='Region of Interest 2: Overlap')
+axes[0].axvspan(x_right_start, x_right_end, color='magenta', alpha=0.2, label='Region of Interest 3: Kapton')
+axes[0].set_title('Extracted Horizontal Ribbon Slice Profile')
+axes[0].set_ylabel('Transmission Ratio')
+axes[0].legend(loc='upper left')
+axes[0].grid(True, alpha=0.3)
+
+# Assigned phase shift map
+axes[1].plot(phase_map, color='purple', lw=2, label='Estimated Phase Shift $\\phi(x)$')
+axes[1].set_title('Calculated Phase Map based on Material Properties')
+axes[1].set_ylabel('Phase (radians)')
+axes[1].legend(loc='upper left')
+axes[1].grid(True, alpha=0.3)
+
+# Propagated phase contrast line with Fresnel fringes
+axes[2].plot(intensity_propagated_1D, color='firebrick', lw=2, label='Propagated Phase Contrast Intensity')
+axes[2].set_title(f'Simulated Fresnel Edge Fringes after Free Space Propagation ($z$ = {z_propagation}m)')
+axes[2].set_xlabel('Horizontal Pixel Position')
+axes[2].set_ylabel('Diffraction Intensity')
+axes[2].set_xlim(x_left_start - 50, x_right_end + 50) # Zooming in on target region
+axes[2].legend(loc='upper left')
+axes[2].grid(True, alpha=0.3)
 
 plt.tight_layout()
 plt.show()
