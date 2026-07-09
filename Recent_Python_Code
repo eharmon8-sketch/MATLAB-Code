@@ -1,1 +1,546 @@
+import numpy as np
+from PIL import Image
+import matplotlib.pyplot as plt
+import sys
+import tifffile
+import math
+import matplotlib.patches as patches
+import cv2
+from django.core.paginator import PageNotAnInteger
+from django.utils.translation.template import inline_re
+from skimage.registration import phase_cross_correlation
 
+# def XPCI_propagation(sample_type, xray_photon_energy, YAG_diameter, YAG_fluorescence_emission, flux_IP_per_pulse, number_pulses, opening_angle, sample_diameter, sample_thickness, distance_IP_window, distance_window_sample, distance_sample_YAG, distance_YAG_lens):
+# return effective_pixel_size_horizontal, effective_pixel_size_vertical, FOV_horizontal ,FOV_vertical ,lens_magnification, beam_radius_YAG, beam_radius_sample, sensor_intensities, sensor_intensities_with_sample
+
+
+# samD = 0.005  # m
+# distYAGtoCam = 0.5  # m
+# energy = 9300  # eV
+# fluxip = 5000000  # x-rays
+# airTsam = 0.8807
+# airTYAG = 0.8293
+# pathSam = 0.17  # m
+# pathYAG = 0.25  # m
+# waterT = 0.9934
+# openingAngle = 10e-3  # rad
+# YAGT = 0.1138
+
+
+# Camera and optical information for an ORCA-Flash4.0 LT3 Digital CMOS camera
+# Using a MAP 1030100 lens
+f_number = 0.045 # m
+flange_focal_distance = 0.017526 # m
+lens_focal_distance = 0.045 # m
+
+pixel_size = 6.5e-6 # m.
+pixel_area = pixel_size ** 2 # area of one pixel, m ** 2
+detector_horizontal = 2048 # horizontal pixels
+detector_vertical = 2048 # vertical pixels
+well_depth = 30000 # per pixel
+quantum_efficiency = 0.82 # achieved at a wavelength of 560 nm (visible green light)
+number_bits = 16
+total_counts = 2 ** number_bits
+total_pixels = detector_vertical * detector_horizontal # = pHorizontal * pVertical; number of pixels
+detector_area = pixel_area * total_pixels # actual area of sensor
+
+
+# Geometry and distances
+distance_IP_window = 4.8 # m
+distance_window_sample = 0.17 # m
+distance_sample_YAG = 0.25 # m (Propagation distance z)
+distance_YAG_lens = 0.164 # m
+YAG_diameter = 0.02 # m
+YAG_radius = YAG_diameter / 2 # m, radius of YAG
+YAG_fluorescence_emission = 30 # number of green photons emitted per incident eV of X-rays
+opening_angle = 0.010 # 10 m, radians
+flux_IP_per_pulse = 1e5
+number_pulses = 1
+
+
+# Physical constants and wave specifications to 9.3 keV
+xray_photon_energy = 9300 # eV
+window_transmission = 0.990 # optical glass window with double-sided anti-reflection coating
+air_linear_attenuation_coef = 1.08 # 1 / m
+water_linear_attenuation_coef = 480 # 1 / m
+YAG_transmission = 0.341 # 2e-5 m YAG
+
+
+# xray_energy_keys = [9300, 12000, 15000, 18000, 20000, 23000]
+# attenuation_coefficients = [
+#   [0.902, 12, 18, 0.341],
+#   [0.95, 1.8, 16, 0.587],
+#   [0.972, 1.5, 15, 0.750],
+#   [0.0981, 1.2, 14, 0.388],
+#   [0.985, 1.1, 14, 0.484],
+#    [0.987, 1.0, 13, 0.607]
+# ]
+# transmission_matrix = dict(zip(xray_energy_keys, attenuation_coefficients))
+
+
+# if 'xray_photon_energy' not in locals ():
+#   sys.exit('Error: xray_photon_energy is not defined.')
+
+# if 'xray_photon_energy' not in transmission_matrix:
+#   sys.exit(f'Error: No entry for photon energy {xray_photon_energy} in the lookup table.')
+
+
+# selection = transmission_matrix[xray_photon_energy]
+# window_transmission = selection[1]
+# air_linear_attenuation_coeff = selection[2]
+# water_linear_attenuation_coeff = selection[3]
+# YAG_transmission = selection[4]
+
+
+# Sample Parameters
+sample_diameter = 0.005  # m
+sample_radius = sample_diameter / 2  # m
+sample_thickness = 1e-5
+
+# General variables
+h = 6.626070041e-34  # m ** 2 in kg / s
+c = 3e8  # m / s
+hc = 1.23984193e-6 # eV * m
+# range of lambda for YAG = 530 - 550 nm
+# range of lambda for YAG = 530 - 550 nm
+# solidAngleRatio = 0.0123 / (4 * pi)  # solid angle ratio due to f-number 4
+# f-number (N) = focal length (f) / entrance pupil diameter (D)
+# tan(theta) = 0.5 * (D / f)
+# for small theta, theta is approximately tan(theta)
+# theta is approx. 0.5 * N
+# solid_angle = 2 * pi * (1 - cos(theta))
+# cos(theta) is approx. 1 - (theta ** 2) / 2
+# solid_angle = pi * (theta ** 2)
+# Given theta is approx. 1 / (2 * N), this simplifies to: pi / (4 * N ** 2)
+# solid_angle_ratio = solid_angle / (4 * pi) = 1 / (16 * N ** 2)
+solid_angle_ratio = (1 / 16) * (f_number ** -2)
+wavelength = hc / xray_photon_energy # m
+k = (2 * np.pi) / wavelength # Wave number
+
+# Complex refractive indices (n = 1 - delta + i*beta)
+# Left half material (gold nanoparticles)
+delta1, beta1 = 4.6e-5, 4.8e-6
+# Right half material (cured resin)
+delta2, beta2 = 3.43e-6, 4.18e-9
+
+# Pixel calculations with Field of View (FOV)
+# dist = (FOV + 18.913) / 0.091 # mm
+# Horizontal field of view (FOV_horizontal)
+# FOV_horizontal = distYAGtoCam * 0.091 - 0.018913  # m
+# FOV = FOV_horizontal / 1.2  # m
+
+
+# FOV = sensor_size / magnification (M)
+# M = image_size / object_size = (dist_source_sample + dist_sample_detector) / dist_source_sample
+
+
+# Optical geometry scaling
+lens_magnification = lens_focal_distance / (distance_YAG_lens - lens_focal_distance)
+if lens_magnification < 0:
+    sys.exit('Error: The focal length of the lens is larger than the distance of your YAG.')
+
+# Field of View (FOV) calculation
+FOV_horizontal = (pixel_size * detector_horizontal) / lens_magnification
+FOV_vertical = (pixel_size * detector_vertical) / lens_magnification
+
+# Effective pixel size calculation
+effective_pixel_size_horizontal = FOV_horizontal / detector_horizontal
+effective_pixel_size_vertical = FOV_vertical / detector_vertical
+
+xray_magnification = (distance_IP_window + distance_window_sample + distance_sample_YAG) / (distance_IP_window + distance_window_sample)
+
+
+# Coordinate grid generation
+x_vector = (np.arange(detector_horizontal) - detector_horizontal / 2 + 0.5) * pixel_size / lens_magnification
+y_vector = (detector_vertical / 2 - 0.5 - np.arange(detector_vertical)) * pixel_size / lens_magnification
+x_matrix, y_matrix = np.meshgrid(x_vector, y_vector)
+radial_distance_matrix = np.sqrt(x_matrix**2 + y_matrix**2)
+
+
+# Geometry filters
+YAG_filter = radial_distance_matrix < YAG_radius
+sample_filter = (radial_distance_matrix / xray_magnification) < sample_radius
+
+
+# Split YAG detector / material specifications
+# Split the coordinate space down the middle (left and right)
+left_half = x_matrix < 0
+right_half = ~left_half
+
+# Initialize maps for delta and beta across the sample domain
+delta_map = np.zeros_like(x_matrix)
+beta_map = np.zeros_like(x_matrix)
+
+# Properties where sample exists based on split location
+delta_map[sample_filter & left_half] = delta1
+beta_map[sample_filter & left_half] = beta1
+delta_map[sample_filter & right_half] = delta2
+beta_map[sample_filter & right_half] = beta2
+
+
+# Wave propagation with the angular spectrum method
+# 1. Complex field exiting sample plane
+amplitude_attenuation = np.exp(-k * beta_map * sample_thickness)
+phase_shift = np.exp(-1j * k * delta_map * sample_thickness)
+U_exit = amplitude_attenuation * phase_shift
+
+# 2. Fourier propagation setup
+dx = pixel_size / lens_magnification
+dy = dx
+fx = np.fft.fftfreq(detector_horizontal, d=dx)
+fy = np.fft.fftfreq(detector_vertical, d=dy)
+FX, FY = np.meshgrid(fx, fy)
+
+# Free space transfer function
+z = distance_sample_YAG
+H = np.exp(-1j * np.pi * wavelength * z * (FX**2 + FY**2))
+
+# 3. Propagate to YAG screen
+U_fft = np.fft.fft2(U_exit)
+U_propagated = np.fft.ifft2(U_fft * H)
+intensity_YAG = np.abs(U_propagated)**2
+
+# Scale intensities to match detector counting mechanisms
+sensor_counts = intensity_YAG * YAG_filter * (total_counts * 0.7)
+
+
+# Visualization and line profile analysis
+fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+
+# Subplot 1: Simulated phase contrast split-screen image
+im0 = ax[0].imshow(sensor_counts, cmap='viridis', extent=[x_vector[0]*1e3, x_vector[-1]*1e3, y_vector[-1]*1e3, y_vector[0]*1e3])
+ax[0].set_title('2D Detector Counts\n(Left Material vs Right Material Phase Shift)')
+ax[0].set_xlabel('Horizontal Position (mm)')
+ax[0].set_ylabel('Vertical Position (mm)')
+plt.colorbar(im0, ax=ax[0], label='Counts / Pixel')
+
+# Subplot 2: Horizontal line profile (statistical analysis)
+mid_row = detector_vertical // 2
+line_profile = sensor_counts[mid_row, :]
+ax[1].plot(x_vector * 1e3, line_profile, color='firebrick', lw=2, label='Horizontal Cut')
+ax[1].axvline(0, color='black', linestyle='--', alpha=0.5, label='Material Split Boundary')
+ax[1].set_title(f'Line Profile Analysis at Center Row ({mid_row})')
+ax[1].set_xlabel('Horizontal Position (mm)')
+ax[1].set_xlim(-0.05, 0.05)
+ax[1].set_ylabel('Intensity (Counts)')
+ax[1].legend()
+
+# Simple Descriptive Statistics
+print('Line Profile Statistics')
+print(f'Left Side Max Counts (Material 1): {np.max(line_profile[x_vector < 0]):.2f}')
+print(f'Right Side Max Counts (Material 2): {np.max(line_profile[x_vector > 0]):.2f}')
+print(f'Global Intensity Variance: {np.var(line_profile):.2f}')
+
+plt.tight_layout()
+plt.show()
+
+
+
+N = 10
+img_stack = np.zeros((2048, 2048, N), dtype='float32')
+
+for i in range(N):
+    fname = f'Xray_images/Image{i+1}.tif'
+    print(fname)
+    img = tifffile.imread(fname)
+    img_stack[:,:,i] = img
+
+print('Stack Shape:', img_stack.shape)
+image9 = img_stack[:, :, 8]
+image10 = (img_stack[:, :, 9]) * 0.72
+diff = image9 - image10
+fig, ax = plt.subplots(figsize=(10, 8))
+# Positive difference (Image 9 was brighter) and displays as red
+# Negative difference (Image 10 was brighter) and displays as blue
+cax = ax.imshow(diff, cmap='bwr')
+cbar = fig.colorbar(cax, ax=ax)
+cbar.set_label('Intensity of Visible Light Emitted')
+ax.set_title('Difference Plot Between Image 9 and Image 10')
+ax.axis('off')
+plt.show()
+
+plt.figure(figsize=(10, 8))
+plt.imshow(img_stack[:,:,0], cmap="gray")
+plt.colorbar()
+plt.axis('off')
+plt.show()
+
+def calculate_transmission(I0, attenuation_length, thickness):
+    """
+    Calculates the transmitted intensity with the following parameters:
+
+    I0 (float): Initial intensity (eV)
+    attenuation_length (float): Lambda value (microns)
+    thickness (float): Thickness of the material 'x' (microns)
+
+    Returns:
+    float: Transmitted intensity (eV)
+    """
+    # a = 1 / lambda
+    alpha = 1.0 / attenuation_length
+
+    # I = I0 * e^-(a*x)
+    transmitted_intensity = I0 * math.exp(-alpha * thickness)
+
+    return transmitted_intensity
+
+# Default Parameters
+I0_value = 8104.32 # eV
+
+# Aluminum properties
+al_lambda = 80.6286 # microns
+al_thickness = 16 # microns
+
+# Kapton properties
+kapton_lambda = 1226.78 # microns
+kapton_thickness = 50.0 # microns
+
+al_transmission = calculate_transmission(I0_value, al_lambda, al_thickness)
+kapton_transmission = calculate_transmission(I0_value, kapton_lambda, kapton_thickness)
+
+print('Transmission Results')
+print(f'Aluminum Transmitted Intensity: {al_transmission:.4f} eV')
+print(f'Kapton Transmitted Intensity: {kapton_transmission:.4f} eV')
+
+image9 = img_stack[:, :, 8] # Al/Kapton object image
+image10 = (img_stack[:, :, 9]) * 0.8 # No object image
+
+x_left_start, x_left_end = 1270, 1350
+x_mid_start, x_mid_end = 1420, 1480
+x_right_start, x_right_end = 1590, 1760
+
+y_start, y_end = 450, 600 # Shared vertical bounds across diamond width
+
+# Intensity data from Al/Kapton object image (Image9.tif)
+roi1_img9 = image9[y_start:y_end, x_left_start:x_left_end] # Aluminum
+roi2_img9 = image9[y_start:y_end, x_mid_start: x_mid_end] # Overlap
+roi3_img9 = image9[y_start:y_end, x_right_start: x_right_end] # Kapton
+
+# Extract intensity data from no object image (Image10.tif)
+roi1_img10 = image10[y_start:y_end, x_left_start:x_left_end]
+roi2_img10 = image10[y_start:y_end, x_mid_start: x_mid_end]
+roi3_img10 = image10[y_start:y_end, x_right_start: x_right_end]
+
+# Calculate Mean Intensities
+mean_roi1_9, mean_roi1_10 = np.mean(roi1_img9), np.mean(roi1_img10)
+mean_roi2_9, mean_roi2_10 = np.mean(roi2_img9), np.mean(roi2_img10)
+mean_roi3_9, mean_roi3_10 = np.mean(roi3_img9), np.mean(roi3_img10)
+
+# Calculate experimental transmission
+trans_al = mean_roi1_9 / mean_roi1_10
+trans_overlap = mean_roi2_9 / mean_roi2_10
+trans_kapton = mean_roi3_9 / mean_roi3_10
+
+print('Experimental Transmission Analysis')
+print(f'Aluminum Region (ROI 1): I = {mean_roi1_9:.2f}, I0 = {mean_roi1_10:.2f} -> Transmission = {trans_al:.4f}')
+print(f'Overlap Region (ROI 2): I = {mean_roi2_9:.2f}, I0 = {mean_roi2_10:.2f} -> Overlap = {trans_overlap:.4f}')
+print(f'Kapton Region (ROI 3): I = {mean_roi3_9:.2f}, I0 = {mean_roi3_10:.2f} -> Transmission = {trans_kapton:.4f}')
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7))
+vmin, vmax = np.percentile(image9, 1), np.percentile(image9, 99.9)
+ax1.imshow(image9, cmap='gray', vmin=vmin, vmax=vmax)
+ax1.set_title('Image with Aluminum and Kapton Sample')
+
+ax2.imshow(image10, cmap='gray', vmin=vmin, vmax=vmax)
+ax2.set_title('Image Without Sample')
+
+def draw_regions(ax):
+    colors = ['cyan', 'yellow', 'magenta']
+    regions = [
+        (x_left_start, x_left_end, 'ROI 1: Aluminum'),
+        (x_mid_start, x_mid_end, 'ROI 2: Overlap'),
+        (x_right_start, x_right_end, 'ROI 3: Kapton'),
+    ]
+    for col, (x1, x2, label) in zip(colors, regions):
+        rect = patches.Rectangle((x1, y_start), x2 - x1, y_end - y_start,
+                                 linewidth=1.5, edgecolor=col, facecolor='none')
+        ax.add_patch(rect)
+
+draw_regions(ax1)
+draw_regions(ax2)
+
+plt.tight_layout()
+plt.show()
+plt.close('all')
+
+print('Running Fresnel Propagation and Phase Analysis')
+
+# Defining the horizontal boundaries
+ribbon_y_start = 450
+ribbon_y_end = 600
+
+# Extract one-dimensional horizontal ribbon bounds
+sample_strip = image9[ribbon_y_start:ribbon_y_end,:]
+flat_strip = image10[ribbon_y_start:ribbon_y_end,:]
+
+experimental_profile = np.mean(sample_strip, axis=0)
+flat_field_profile = np.mean(flat_strip, axis=0)
+
+# Normalize experimental profile to obtain pure transmission intensity (I/I0)
+normalized_intensity = experimental_profile / (flat_field_profile + 1e-6)
+
+# Constructing the phase shift map across three regions
+phase_map = np.zeros_like(normalized_intensity)
+delta_Al = 1.3e-5
+delta_Kapton = 3.2e-6
+delta_Overlap = delta_Al / delta_Kapton
+
+phase_map[x_left_start:x_left_end] = (2 * np.pi / wavelength) * delta_Al * (al_thickness * 1e-6)
+phase_map[x_mid_start:x_mid_end] = (2 * np.pi / wavelength) * delta_Overlap * ((al_thickness + kapton_thickness) * 1e-6)
+phase_map[x_right_start:x_right_end] = (2 * np.pi / wavelength)* delta_Kapton * (kapton_thickness * 1e-6)
+
+# Exit wavefront using the amplitude and phase from regions of interest
+amplitude_exit = np.sqrt(np.clip(normalized_intensity, 0, 1))
+U_exit_1D = amplitude_exit * np.exp(1j * phase_map)
+
+# Applying the angular spectrum method
+number_pixels_x = detector_horizontal
+dx_eff = pixel_size / lens_magnification # Effective pixel size
+fx_1D = np.fft.fftfreq(number_pixels_x, d=dx_eff)
+
+# Propagation distance z is based on air timing and geometry settings
+z_propagation = distance_sample_YAG
+
+# Free space transfer function in one dimension
+H_1D = np.exp(-1j * np.pi * wavelength * z_propagation * (fx_1D**2))
+
+# Forward fourier transform
+U_fft_1D = np.fft.fft(U_exit_1D)
+
+# Using transfer function and inverse FFT
+U_propagated_1D = np.fft.ifft(U_fft_1D * H_1D)
+intensity_propagated_1D = np.abs(U_propagated_1D)**2
+
+# Calculate propagation time / air travel time over a distance z
+propagation_time_ns = (z_propagation / c) * 1e9
+print(f'X-ray propagation distance: {z_propagation:.4f}m')
+print(f'Calculated time to detector: {propagation_time_ns:.4f}ns')
+
+fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
+
+# Extracted raw data
+axes[0].plot(normalized_intensity, color='black', label='Normalized Transmission ($I/I_0$)')
+axes[0].axvspan(x_left_start, x_left_end, color='cyan', alpha=0.2, label='Region of Interest 1: Aluminum')
+axes[0].axvspan(x_mid_start, x_mid_end, color='yellow', alpha=0.2, label='Region of Interest 2: Overlap')
+axes[0].axvspan(x_right_start, x_right_end, color='magenta', alpha=0.2, label='Region of Interest 3: Kapton')
+axes[0].set_title('Extracted Horizontal Ribbon Slice Profile')
+axes[0].set_ylabel('Transmission Ratio')
+axes[0].legend(loc='upper left')
+axes[0].grid(True, alpha=0.3)
+
+# Assigned phase shift map
+axes[1].plot(phase_map, color='purple', lw=2, label='Estimated Phase Shift $\\phi(x)$')
+axes[1].set_title('Calculated Phase Map based on Material Properties')
+axes[1].set_ylabel('Phase (radians)')
+axes[1].legend(loc='upper left')
+axes[1].grid(True, alpha=0.3)
+
+# Propagated phase contrast line with Fresnel fringes
+axes[2].plot(intensity_propagated_1D, color='firebrick', lw=2, label='Propagated Phase Contrast Intensity')
+axes[2].set_title(f'Simulated Fresnel Edge Fringes after Free Space Propagation ($z$ = {z_propagation}m)')
+axes[2].set_xlabel('Horizontal Pixel Position')
+axes[2].set_ylabel('Diffraction Intensity')
+axes[2].set_xlim(x_left_start - 50, x_right_end + 50) # Zooming in on target region
+axes[2].legend(loc='upper left')
+axes[2].grid(True, alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+plt.close('all')
+
+N = 10
+img_stack = np.zeros((2048, 2048, N), dtype='float32')
+
+for i in range(N):
+    fname = f'Xray_images/Image{i+1}.tif'
+    print(fname)
+    img = tifffile.imread(fname)
+    img_stack[:, :, i] = img
+
+print('Stack Shape:', img_stack.shape)
+
+Ref_index = 8
+Target_index = 9
+
+image_ref = img_stack[:, :, Ref_index]
+image_target = img_stack[:, :, Target_index]
+
+def align_cross_correlation(ref_img, target_img, upsample_factor=100):
+    shifts, error, phasediff = phase_cross_correlation(
+        ref_img,
+        target_img,
+        upsample_factor=upsample_factor,
+    )
+    y_shift, x_shift = shifts
+
+    translation_matrix = np.float32([[1, 0, -x_shift], [0, 1, -y_shift]])
+    rows, cols = target_img.shape
+    corrected_image = cv2.warpAffine(
+        target_img,
+        translation_matrix,
+        (cols, rows),
+        flags=cv2.INTER_LANCZOS4,
+    )
+
+    print('\nCross-Correlation Assignment')
+    print(f'Comparing Stack Index {Target_index} against Reference Stack Index {Ref_index}')
+    print(f'Detected Drift Vector X: {x_shift:.3f} pixels, Detected Drift Vector Y: {y_shift:.3f} pixels\n')
+
+    return corrected_image
+
+image_ref = img_stack[:, :, Ref_index]
+image_target = img_stack[:, :, Target_index]
+
+image9 = image_ref
+aligned_image10 = align_cross_correlation(image9, image_target, upsample_factor=100)
+
+image10 = aligned_image10 * 0.8
+
+dif = image9 - image10
+diff_fig, diff_ax = plt.subplots(figsize=(10, 8))
+cax = diff_ax.imshow(diff, cmap='bwr')
+cbar = diff_fig.colorbar(cax, ax=ax)
+cbar.set_label('Intensity of Visible Light Emitted')
+diff_ax.set_title('Difference Plot Between Alignment Image 9 and Image 10')
+plt.show()
+plt.close('diff_fig')
+
+# Leveraging Paganin 2D Reconstruction Block from PyNX
+from pynx.wavefront import Wavefront
+from pynx.wavefront.cpu_operator import BackPropagatePaganin
+
+print("\n--- Initializing PyNX Pagnin Reconstructor ---")
+
+normalized_intensity_2D = image9 / (image10 + 1e-6)
+normalized_intensity_2D = np.clip(normalized_intensity_2D, 0.01, 2.0)
+
+dx_eff = pixel_size / lens_magnification # Effective pixel sizing at the object plane
+z_propagation = distance_sample_YAG # 0.25 meters
+
+# Using aluminum properties as the majority phase template
+selected_delta = 1.3e-5
+
+# beta = (attenuation_coefficient * wavelength) / (4 * pi)
+selected_beta = 1.0e-7
+
+print(f'Effective Pixel Size: {dx_eff * 1e6: 3f} microns')
+print(f'Wavelength: {wavelength * 1e9: 2f} nm')
+print(f'Paganin Delta/Beta Ratio: {selected_delta / selected_beta: .1f}')
+
+intensity_input = normalized_intensity_2D[np.newaxis, :, :].astype(np.complex64)
+
+w_rec = Wavefront(d=intensity_input, pixel_size=dx_eff, wavelength=wavelength)
+w_rec = BackPropagatePaganin(dz=z_propagation, delta=selected_delta, beta=selected_beta) * w_rec
+
+thickness_map_meters = w_rec.paganin_thickness[0]
+thickness_map_microns = thickness_map_meters * 1e6
+
+fig_rec, ax_rec = plt.subplots(figsize=(10, 8))
+cax_rec = ax_rec.imshow(thickness_map_microns, cmap='bwr')
+cbar_rec = fig_rec.colorbar(cax_rec, ax=ax_rec)
+cbar_rec.set_label('Reconstructed Material thickness (µm)')
+ax_rec.set_title('PyNX Paganin 2D Phase Retrieval\n(Calculated Object thickness Profile)')
+ax_rec.axis('on')
+plt.xlabel('X (pixels)')
+plt.ylabel('Y (pixels)')
+plt.show()
